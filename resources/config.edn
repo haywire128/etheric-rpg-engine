@@ -16,5 +16,5 @@
              :flaw
              "Hidden brilliance can lead to isolation when I choose not to reveal it."},
  :world/seed nil,
-  :llm/default-model "deepseek/deepseek-v4-pro",
+  :llm/default-model "google/gemini-3.5-flash",
   :llm/max-tokens 131072}

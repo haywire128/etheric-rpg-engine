@@ -46,7 +46,7 @@ The target configuration structure is a Clojure map:
  :player/traits #{:keywords}   ; A set of player backgrounds/talents, e.g. #{:keen-eyed :silver-tongued :shadow-walker}
  :player/meta {}              ; An open map for rich narrative essence — anything too nuanced for a keyword. Use this freely.
  :world/seed (or long nil)     ; A seed number, or nil for random
- :llm/default-model \"string\"  ; Typically \"deepseek/deepseek-v4-pro\"
+ :llm/default-model \"string\"  ; Typically \"google/gemini-3.5-flash\"
  :llm/max-tokens 131072}        ; Maximum tokens (default 131072)
 
 :player/meta is for prose-level character and world truth that keyword traits cannot express.
@@ -62,7 +62,7 @@ Rules:
 3. Converse with them naturally. Help them define or change their name, genre, backgrounds/talents, and seed.
 4. Once they are satisfied with the configuration, or indicate they are finished, construct the final Clojure map and output it at the very end of your response inside a clojure markdown block like this:
 ```clojure
-{:player/name \"Aldric\" :player/genre :medieval-fantasy :player/traits #{:keen-eyed :silver-tongued} :world/seed 123 :llm/default-model \"deepseek/deepseek-v4-pro\" :llm/max-tokens 131072}
+{:player/name \"Aldric\" :player/genre :medieval-fantasy :player/traits #{:keen-eyed :silver-tongued} :world/seed 123 :llm/default-model \"google/gemini-3.5-flash\" :llm/max-tokens 131072}
 ```
 Only output this block when the configuration conversation is fully complete and they are ready to save and start. No other clojure markdown blocks should be used.
 "))

@@ -48,7 +48,7 @@
 
 (def default-model
   "Default model for all LLM calls. Override per-role in role-registry if needed."
-  "deepseek/deepseek-v4-pro")
+  "google/gemini-3.5-flash")
 
 ;; ══════════════════════════════════════════════════════════════════════════════
 ;; Pure Functions
