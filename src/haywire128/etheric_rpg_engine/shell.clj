@@ -232,7 +232,11 @@
    {:db/ident :generated/at :db/valueType :db.type/instant :db/cardinality :db.cardinality/one}
    {:db/ident :generated/by :db/valueType :db.type/keyword :db/cardinality :db.cardinality/one}
    {:db/ident :forged/at :db/valueType :db.type/instant :db/cardinality :db.cardinality/one}
-   {:db/ident :forged/by :db/valueType :db.type/keyword :db/cardinality :db.cardinality/one}])
+   {:db/ident :forged/by :db/valueType :db.type/keyword :db/cardinality :db.cardinality/one}
+   {:db/ident :stance/source :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
+   {:db/ident :stance/target :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
+   {:db/ident :stance/type :db/valueType :db.type/keyword :db/cardinality :db.cardinality/one}
+   {:db/ident :stance/intensity :db/valueType :db.type/double :db/cardinality :db.cardinality/one}])
 
 (defn datahike-db
   "Factory for Datahike-backed WorldDB. Creates an in-memory database.
@@ -547,6 +551,43 @@
     (c/transact! db [entity])
     {:logged 1 :action entity}))
 
+(defn q-stances
+  "Query all stance relations in the database. Returns a sequence of maps:
+   {:source str :target str :type keyword :intensity double}"
+  [db]
+  (let [db-val (d/db (:conn db))]
+    (map (fn [[src-name tgt-name type intensity]]
+           {:source src-name :target tgt-name :type type :intensity intensity})
+         (d/q '[:find ?src-name ?tgt-name ?type ?intensity
+                :where [?s :stance/source ?src]
+                       [?s :stance/target ?tgt]
+                       [?s :stance/type ?type]
+                       [?s :stance/intensity ?intensity]
+                       [?src :entity/name ?src-name]
+                       [?tgt :entity/name ?tgt-name]]
+              db-val))))
+
+(defn set-stance-by-names!
+  "Update or create a stance using entity names."
+  [db source-name target-name type intensity]
+  (let [conn (:conn db)
+        db-val (d/db conn)
+        source-id (ffirst (d/q '[:find ?e :where [?e :entity/name ?n] :in $ ?n] db-val source-name))
+        target-id (ffirst (d/q '[:find ?e :where [?e :entity/name ?n] :in $ ?n] db-val target-name))]
+    (when (and source-id target-id)
+      (let [existing-id (ffirst (d/q '[:find ?s
+                                       :where [?s :stance/source ?src]
+                                              [?s :stance/target ?tgt]
+                                       :in $ ?src ?tgt]
+                                     db-val source-id target-id))
+            entity (cond-> {:stance/source source-id
+                            :stance/target target-id
+                            :stance/type type
+                            :stance/intensity intensity}
+                     existing-id (assoc :db/id existing-id))]
+        (d/transact conn [entity])))))
+
+
 ;; ══════════════════════════════════════════════════════════════════════════════
 ;; RLM Loop
 ;; ══════════════════════════════════════════════════════════════════════════════
@@ -602,6 +643,9 @@ IMPORTANT: The following are ALREADY BOUND and available in your scope:
   log-action! - function: (log-action! action-map player-id) - logs a player action for history
   q-player-patterns - function: (q-player-patterns !db player-id) - queries discovered patterns for player
   q-action-history - function: (q-action-history !db player-id window) - queries action history for player
+  q-stances - function: (q-stances !db) - queries all active relational stances in the world
+  set-stance-by-names! - function: (set-stance-by-names! !db source-name target-name type intensity) - sets or updates a stance relationship
+
 
 DO NOT try to define or rebind these. Just use them directly.
 DO NOT use transact! directly - use store-taxonomy!, store-location!, or store-entity! instead.
@@ -684,6 +728,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
       loc-traits (set (:location/traits location))
       loc-atmosphere (:location/atmosphere location)
       patterns (q-player-patterns !db player-id)
+      stances (q-stances !db)
       dice (cast-dice)
       ;; 1. Retrieve and resolve all entities in current location
       ents (keep #(q-entity !db (:db/id %)) (:location/entities location))
@@ -722,8 +767,12 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
                                   :lineage loc-path}
                        :relationship {:strength (or (:relationship/strength relationship) 0.0)}
                        :actor-reputation :neutral
-                       :player-patterns patterns}
+                       :player-patterns patterns
+                       :stances stances}
                       :oracle)]
+  ;; Update stances from Oracle result
+  (doseq [su (:stance-updates result)]
+    (set-stance-by-names! !db (:source su) (:target su) (:type su) (:intensity su)))
   ;; Log action history
   (log-action! {:turn (or (:turn last-turn) 1) :type (or (:type parsed-input) :unknown) :target target-name :outcome result} player-id)
   ;; Witness analyzes behavioral patterns dynamically
@@ -742,6 +791,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
     (let [rel-deltas (filter #(= (:type %) :relationship-delta) (:side-effects result))
           scribe-res (sub-rlm {:player {:name player-name :traits player-traits :reputation :neutral}
                                 :turn-events [{:action {:type (or (:type parsed-input) :unknown) :target target-name} :outcome result}]
+                                :npc-actions (:npc-actions result)
                                 :behavioral-scan witness-res
                                 :relationship-deltas rel-deltas
                                 :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
@@ -809,7 +859,9 @@ Call finalize! to end the turn. Max " (str c/default-max-iterations) " iteration
                    "      q-range (fn [_ p d] ((requiring-resolve '" c-ns "/q-range) " s-ns "/*rlmdb* p d))\n"
                    "      q-rels (fn [_ id] ((requiring-resolve '" c-ns "/q-rels) " s-ns "/*rlmdb* id))\n"
                    "      q-player-patterns (fn [_ player-id] ((requiring-resolve '" c-ns "/q-player-patterns) " s-ns "/*rlmdb* player-id))\n"
-                   "      q-action-history (fn [_ player-id window] ((requiring-resolve '" c-ns "/q-action-history) " s-ns "/*rlmdb* player-id window))]\n"
+                   "      q-action-history (fn [_ player-id window] ((requiring-resolve '" c-ns "/q-action-history) " s-ns "/*rlmdb* player-id window))\n"
+                    "      q-stances (fn [_] ((requiring-resolve '" s-ns "/q-stances) " s-ns "/*rlmdb*))\n"
+                    "      set-stance-by-names! (fn [_ src tgt typ intensity] ((requiring-resolve '" s-ns "/set-stance-by-names!) " s-ns "/*rlmdb* src tgt typ intensity))]\n"
                    "  " code-str ")")
           eval-fut (future
                      (binding [*rlmenv* env *rlmdb* db *rlmlm* llm]

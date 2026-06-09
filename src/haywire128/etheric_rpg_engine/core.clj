@@ -352,12 +352,12 @@ Rules:
   "You are the Oracle function.
 
 Signature:
-(fn oracle [{:keys [action dice actor target location relationship actor-reputation player-patterns]}]
-  ;; Returns: {:outcome {:success bool :degree kw} :narrative str :side-effects [...]})
+(fn oracle [{:keys [action dice actor target location relationship actor-reputation player-patterns stances]}]
+  ;; Returns: {:outcome {:success bool :degree kw} :narrative str :side-effects [...] :npc-actions [...] :stance-updates [...]})
 
 Purpose:
 Resolve a player action through Fortune & Folly. Interpret dice, weigh traits,
-consider relationships, reputation, and behavioral patterns. Produce narrative outcome and side effects.
+consider relationships, reputation, and behavioral patterns. Produce narrative outcome, side effects, and optional autonomous NPC reactions.
 CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 CRITICAL: You are passed the immediate previous turn's action and narrative under `:last-turn`. You MUST resolve the current action as a direct, logical, and coherent continuation of this previous narrative! For example, if on the previous turn the player was facing an assassin attacking their sibling, and on this turn they say 'I dart toward my sibling', you must resolve this action within that exact situation (e.g. they reach the sibling or get intercepted), ensuring absolute, flawless narrative coherence!
 
@@ -389,7 +389,8 @@ For example, the structure looks like:
  :actor-reputation :notorious
  :player-patterns [{:behavior/pattern-name \"attempted-intimidation\"
                     :behavior/groundedness 0.85
-                    :behavior/description \"Uses threats to get what he wants.\"}]}
+                    :behavior/description \"Uses threats to get what he wants.\"}]
+ :stances [{:source \"Hilda\" :target \"Bjorn\" :type :friendly :intensity 0.8}]}
 
 Would produce output like:
 {:outcome {:success true :degree :partial :magnitude-applied 0.85}
@@ -397,7 +398,9 @@ Would produce output like:
  :side-effects [{:type :relationship-delta :from 1 :to 2 :delta -0.3
                  :reason \"Aldric used intimidation against Bjorn\"}
                 {:type :record-behavior :entity 1 :pattern :attempted-intimidation
-                 :detail {:target 2 :turn 47}}]}
+                 :detail {:target 2 :turn 47}}]
+ :npc-actions [{:actor \"Hilda\" :action :frown :target \"Aldric\" :reason \"Hilda is friendly toward Bjorn and dislikes Aldric's threat.\"}]
+ :stance-updates [{:source \"Hilda\" :target \"Aldric\" :type :wary :intensity 0.6}]}
 
 Rules:
 - CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Traits are **invisible mechanical substrate** — they weight the resolution but must NEVER appear in the narrative text as words, names, or concepts. Do NOT write ':silver-tongued', 'keen-eyed', or any trait name or paraphrase. Instead, show the consequence in the world: the crowd parts, the lock yields, the blade finds a gap. The dice outcome informs the degree of success or failure — never mention dice, fortune, folly, rolls, stats, attributes, or mechanics. The player must experience a living world, not a game system.
@@ -409,6 +412,9 @@ Rules:
 - Reputation colors how NPCs perceive the action.
 - Location traits set the scene's emotional tone.
 - Player behavioral patterns (:player-patterns) must influence action outcomes. For example, a player with an established pattern of \"attempted-intimidation\" might find intimidation actions easier, but it could make friendly persuasion more difficult due to suspicion.
+- **Autonomous NPC Stances & Actions**: The Oracle is passed the current `:stances` representing local relational attitudes. Based on the player's action and its outcome, nearby NPCs may react with autonomous `:npc-actions` (e.g. intervening, threatening, comforting others) and the database stances should be updated/created via `:stance-updates` (with keys `:source`, `:target`, `:type`, `:intensity`).
+- Stance `:type` should be a keyword (e.g., `:wary`, `:hostile`, `:friendly`, `:defending`, `:threatening`, `:comforting`, `:neutral`).
+- `:npc-actions` should contain maps: `{:actor string, :action keyword, :target string, :reason string}`.
 - :degree is :none, :partial, :full, or :critical.
 - :magnitude-applied reflects how much of the dice magnitude actually manifested.
 - Side effects describe what CHANGED in the world. The caller applies them.
@@ -498,7 +504,7 @@ Rules:
   "You are the Scribe function.
 
 Signature:
-(fn scribe [{:keys [player turn-events behavioral-scan relationship-deltas location last-turn]}]
+(fn scribe [{:keys [player turn-events npc-actions behavioral-scan relationship-deltas location last-turn]}]
   ;; Returns: {:narrative str :emergent-effects [...] :suggestions [...]})
 
 Purpose:
@@ -517,6 +523,8 @@ For example, the structure looks like:
    :outcome {:success true :degree :partial}
    :narrative \"Bjorn's eyes widen...\"
    :side-effects [{:type :relationship-delta :from 1 :to 2 :delta -0.3}]}]
+ :npc-actions
+ [{:actor \"Hilda\" :action :frown :target \"Aldric\" :reason \"Hilda is friendly toward Bjorn and dislikes Aldric's threat.\"}]
  :behavioral-scan
  {:patterns [{:pattern \"pays-in-exact-change\" :groundedness 0.73}
             {:pattern :attempted-intimidation :count 3 :groundedness 0.85}]
@@ -541,6 +549,7 @@ Rules:
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - CRITICAL: NARRATIVE CONTINUITY & REPETITION AVOIDANCE. Weave the current turn's events into a direct, seamless continuation of the previous turn's narrative (`:last-turn`). Compare your output against the narrative under `:last-turn`. You MUST NEVER repeat specific words, ambient descriptions, or sentence structures (e.g. if the previous turn mentioned a 'cloaked figure' or 'barred gate', do not repeat those descriptions verbatim unless the player explicitly interacted with them again). If the player repeated an action, describe the repetition explicitly as an act of continuation or growing monotony (e.g. 'Once again, you...', 'Your repeated attempts...'). Ensure the narrative moves forward dynamically.
 - Weave turn events into coherent narrative. Don't just list them.
+- **Weave NPC Actions**: You are passed `:npc-actions` representing autonomous actions taken by nearby characters. You MUST weave these actions and their motives/reasons seamlessly into the narrative (e.g. if an NPC frowns, comforts someone, or draws a weapon, describe it as part of the unfolding scene).
 - Describe emergent changes (reputation, relationships) naturally.
 - Suggest 2-3 natural next actions. Don't force the player's hand.
 - Never resolve future events. Only describe consequences of what ALREADY happened.
