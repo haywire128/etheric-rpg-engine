@@ -39,7 +39,7 @@
 ;; ══════════════════════════════════════════════════════════════════════════════
 
 (def ^:const default-max-iterations 50)
-(def ^:const default-max-tokens 16384)
+(def ^:const default-max-tokens 131072)
 
 (def ^:const fortune-sides 20)
 (def ^:const folly-sides 20)
@@ -48,7 +48,7 @@
 
 (def default-model
   "Default model for all LLM calls. Override per-role in role-registry if needed."
-  "inception/mercury-2")
+  "deepseek/deepseek-v4-pro")
 
 ;; ══════════════════════════════════════════════════════════════════════════════
 ;; Pure Functions

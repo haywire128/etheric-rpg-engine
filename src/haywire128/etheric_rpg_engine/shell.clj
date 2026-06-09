@@ -1009,11 +1009,11 @@ Call finalize! to end the turn. Max " (str c/default-max-iterations) " iteration
           eval-fut (future
                      (binding [*rlmenv* env *rlmdb* db *rlmlm* llm]
                        (eval (read-string wrapped))))
-          res (deref eval-fut 120000 :timeout-exceeded)]
+          res (deref eval-fut 600000 :timeout-exceeded)]
       (if (= res :timeout-exceeded)
         (do
           (future-cancel eval-fut)
-          {:error (str "TimeoutError: Code evaluation exceeded 120000ms threshold.\n\nCode:\n" code-str)})
+          {:error (str "TimeoutError: Code evaluation exceeded 600000ms threshold.\n\nCode:\n" code-str)})
         res))
     (catch Throwable t
       (let [cause (.getCause t)
