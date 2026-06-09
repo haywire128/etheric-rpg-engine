@@ -56,35 +56,41 @@
 (defn print-narrator
   "Print narrative text with styled pacing. Highly atmospheric, the main focus."
   [text]
-  (println (style text :italic :white)))
+  (println (style text :italic :white))
+  (flush))
 
 (defn print-header
   "Print a clean, minimal, book-like turn or chapter header in muted lilac-ash."
   [text]
   (println)
   (println (style (str "— " text " —") :dim :lilac-ash))
-  (println))
+  (println)
+  (flush))
 
 (defn print-system
   "Print out-of-character system messages. Minimal, small, and out of the way in lilac-ash."
   [text]
-  (println (style (str "» " text) :lilac-ash)))
+  (println (style (str "» " text) :lilac-ash))
+  (flush))
 
 (defn print-success
   "Print positive status updates. Small, inline, and out of the way in tea-green."
   [text]
-  (println (style (str "✔ " text) :bold :tea-green)))
+  (println (style (str "✔ " text) :bold :tea-green))
+  (flush))
 
 (defn print-error
   "Print styled error reports. Small, inline, and out of the way."
   [text]
-  (println (style (str "✘ " text) :bold :red)))
+  (println (style (str "✘ " text) :bold :red))
+  (flush))
 
 (defn print-weaver
   "Print World Weaver dialogue. Distinct but compact and elegant in thistle and frozen-water."
   [text]
   (println (style "✦ World Weaver ✦" :bold :thistle))
-  (println (style text :italic :frozen-water)))
+  (println (style text :italic :frozen-water))
+  (flush))
 
 (defn print-data
   "Print pretty-printed, syntax-colored EDN data."

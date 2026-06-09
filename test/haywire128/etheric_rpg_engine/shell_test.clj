@@ -292,3 +292,20 @@
     (is (thrown? clojure.lang.ExceptionInfo (shell/validate-code "(System/exit 0)"))))
   (testing "Code containing nested eval is rejected"
     (is (thrown? clojure.lang.ExceptionInfo (shell/validate-code "(eval '(println 1))")))))
+
+(deftest scrub-third-wall-test
+  (testing "scrub-third-wall removes dice, rolls, and general mechanic references"
+    (let [ctx {:player {:traits #{:keen-eyed :sword-saint}}}
+          raw-text "Because of a roll of your fortune die and your keen-eyed trait, you successfully rolled a d20."
+          scrubbed (shell/scrub-third-wall raw-text ctx)]
+      (is (not (clojure.string/includes? scrubbed "roll")))
+      (is (not (clojure.string/includes? scrubbed "fortune die")))
+      (is (not (clojure.string/includes? scrubbed "keen-eyed")))
+      (is (not (clojure.string/includes? scrubbed "trait")))
+      (is (not (clojure.string/includes? scrubbed "d20")))))
+  (testing "scrub-third-wall maps dynamic traits correctly"
+    (let [ctx {:actor {:traits #{:sword-saint}}}
+          raw-text "You show off your sword-saint prowess."
+          scrubbed (shell/scrub-third-wall raw-text ctx)]
+      (is (not (clojure.string/includes? scrubbed "sword-saint")))
+      (is (clojure.string/includes? scrubbed "mastery of the blade")))))

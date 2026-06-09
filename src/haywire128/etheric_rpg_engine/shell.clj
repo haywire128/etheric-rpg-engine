@@ -318,6 +318,100 @@
       :else
       {:error (str "LLM API Failure after " max-retries " retries: " error)})))
 
+(defn- extract-trait-keywords
+  "Recursively find all keywords under trait-related keys in context."
+  [m]
+  (let [trait-keys #{:traits :trait/set :taxonomy/traits :location/traits :player/traits}
+        find-traits (fn find-traits [x current-key]
+                      (cond
+                        (keyword? x) (if (trait-keys current-key) #{x} #{})
+                        (map? x) (reduce (fn [acc [k v]]
+                                           (into acc (find-traits v k)))
+                                         #{}
+                                         x)
+                        (coll? x) (reduce (fn [acc val]
+                                            (into acc (find-traits val current-key)))
+                                          #{}
+                                          x)
+                        :else #{}))]
+    (find-traits m nil)))
+
+(def ^:private trait-replacements
+  {"noble-blood" "heritage"
+   "noble blood" "heritage"
+   "sword-saint" "mastery of the blade"
+   "sword saint" "mastery of the blade"
+   "arcane-resonance" "mystical attunement"
+   "arcane resonance" "mystical attunement"
+   "innate-weaving" "instinctive touch"
+   "innate weaving" "instinctive touch"
+   "imperceptible-edge" "subtle advantage"
+   "imperceptible edge" "subtle advantage"
+   "unyielding-adaptation" "resilience"
+   "unyielding adaptation" "resilience"
+   "proleptic-blur" "blinding speed"
+   "proleptic blur" "blinding speed"
+   "keen-eyed" "perception"
+   "keen eyed" "perception"
+   "shadow-walker" "quiet step"
+   "shadow walker" "quiet step"
+   "silver-tongued" "eloquence"
+   "silver tongued" "eloquence"})
+
+(def ^:private general-replacements
+  [;; Exact phrases first
+   [(re-pattern "(?i)\\bfortune die\\b") "fates"]
+   [(re-pattern "(?i)\\bfortune roll\\b") "effort"]
+   [(re-pattern "(?i)\\bfolly die\\b") "misfortune"]
+   [(re-pattern "(?i)\\bfolly roll\\b") "misstep"]
+   [(re-pattern "(?i)\\broll of the dice\\b") "stroke of fate"]
+   [(re-pattern "(?i)\\broll of dice\\b") "stroke of fate"]
+   [(re-pattern "(?i)\\b20-sided\\b") "unseen"]
+   [(re-pattern "(?i)\\bd20\\b") "fate"]
+   ;; Individual words
+   [(re-pattern "(?i)\\bt_r_a_i_t_s?\\b") "talent"]  ;; Avoid matching actual word trait in code but scrub user output
+   [(re-pattern "(?i)\\btraits?\\b") "talent"]
+   [(re-pattern "(?i)\\bdice\\b") "fates"]
+   [(re-pattern "(?i)\\bdie\\b") "fate"]
+   [(re-pattern "(?i)\\brolls?\\b") "attempts"]
+   [(re-pattern "(?i)\\brolled\\b") "attempted"]
+   [(re-pattern "(?i)\\brolling\\b") "attempting"]
+   [(re-pattern "(?i)\\bfolly\\b") "misstep"]
+   [(re-pattern "(?i)\\bmechanics?\\b") "principles"]
+   [(re-pattern "(?i)\\bstats?\\b") "abilities"]
+   [(re-pattern "(?i)\\battributes?\\b") "characteristics"]
+   [(re-pattern "(?i)\\bmodifiers?\\b") "influences"]])
+
+(defn scrub-third-wall
+  "Scrub any mention or allusion to traits, dice, or rules to protect the third wall."
+  [text context]
+  (if (string? text)
+    (let [traits (extract-trait-keywords context)
+          text-with-traits (reduce (fn [t kw]
+                                     (let [n (name kw)
+                                           n-spaced (str/replace n #"[-_]" " ")
+                                           rep-n (get trait-replacements n "natural talents")
+                                           rep-spaced (get trait-replacements n-spaced "natural talents")]
+                                       (-> t
+                                           (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n) "\\b")) rep-n)
+                                           (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n-spaced) "\\b")) rep-spaced))))
+                                   text
+                                   traits)]
+      (reduce (fn [t [pat rep]]
+                (str/replace t pat rep))
+              text-with-traits
+              general-replacements))
+    text))
+
+(defn- scrub-all-strings
+  "Recursively walk map/collection and scrub all string values."
+  [x context]
+  (cond
+    (string? x) (scrub-third-wall x context)
+    (map? x) (reduce-kv (fn [m k v] (assoc m k (scrub-all-strings v context))) {} x)
+    (coll? x) (mapv #(scrub-all-strings % context) x)
+    :else x))
+
 (defn sub-rlm
   "Invoke a role-specific sub-RLM. Used by root LLM's generated code.
    Returns parsed EDN from role's response."
@@ -327,7 +421,7 @@
             (throw (ex-info (str "Unknown role: " role-kw)
                             {:role role-kw :available (keys c/role-registry)})))
         model (or model c/default-model)
-        max-tokens (or max-tokens c/default-max-tokens)
+        max-tokens (min (or max-tokens c/default-max-tokens) c/default-max-tokens)
         messages [{:role :system :content prompt}
                   {:role :user :content (pr-str context)}]
         opts {:max-tokens max-tokens}
@@ -335,7 +429,10 @@
         {:keys [content cost error]} api-res]
     (if content
       (try
-        (extract-edn content)
+        (let [parsed (extract-edn content)]
+          (if (map? parsed)
+            (scrub-all-strings parsed context)
+            parsed))
         (catch Exception e
           {:parse-error (.getMessage e) :raw content :cost cost}))
       {:error (or error :empty-content) :cost cost})))
@@ -437,6 +534,8 @@
   []
   (str "You are the root orchestrator of a Clojure RPG engine.
 Output executable Clojure code ONLY. No markdown, no explanation.
+
+CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. All generated narrative shown to the player must NEVER reference, name, or in any way allude to traits, stats, dice, rolls, or rules. When orchestrating sub-RLM roles (like :scout, :oracle, :scribe), guarantee that no game-mechanical terms, dice terminology (fortune, folly, roll, dice, twenty-sided), or specific trait keyword names ever leak into player-facing text.
 
 IMPORTANT: The following are ALREADY BOUND and available in your scope:
   !env - the environment atom (use env-get, env-set, finalize!)
@@ -719,7 +818,7 @@ Call finalize! to end the turn. Max " (str c/default-max-iterations) " iteration
   (swap! (:atom env) dissoc :final)
   (let [env-config (get @(:atom env) :config)
         root-model (or root-model (:llm/default-model env-config) c/default-model)
-        max-tokens (or max-tokens (:llm/max-tokens env-config) 131072)]
+        max-tokens (min (or max-tokens (:llm/max-tokens env-config) c/default-max-tokens) c/default-max-tokens)]
     (c/env-set env :prompt prompt)
     (let [system-prompt (root-system-prompt)
           hist          (atom [{:role :system :content system-prompt}

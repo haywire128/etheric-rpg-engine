@@ -106,8 +106,11 @@
       
       (= "/status" input)
       (let [config (shell/load-config)]
-        (cli/print-system "Current Active Configuration:")
-        (cli/print-data config))
+        (println)
+        (cli/print-narrator "✦ Your Presence in this World ✦")
+        (println (cli/style (str "  Name:  " (:player/name config)) :bold :white))
+        (println (cli/style (str "  Genre: " (some-> (:player/genre config) name str/capitalize)) :bold :white))
+        (println))
       
       :else
       (do

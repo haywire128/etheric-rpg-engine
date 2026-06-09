@@ -39,7 +39,7 @@
 ;; ══════════════════════════════════════════════════════════════════════════════
 
 (def ^:const default-max-iterations 50)
-(def ^:const default-max-tokens 65536)
+(def ^:const default-max-tokens 16384)
 
 (def ^:const fortune-sides 20)
 (def ^:const folly-sides 20)
@@ -48,7 +48,7 @@
 
 (def default-model
   "Default model for all LLM calls. Override per-role in role-registry if needed."
-  "deepseek/deepseek-v4-flash")
+  "inception/mercury-2")
 
 ;; ══════════════════════════════════════════════════════════════════════════════
 ;; Pure Functions
@@ -332,6 +332,7 @@ Would produce output like:
            :atmosphere \"subdued tension beneath the warmth\"}}
 
 Rules:
+- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. You must NEVER reference, name, or in any way allude to any game-mechanical traits, stats, dice, or rules in your narrative output text. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', or any specific trait keyword name or what they represent. Focus entirely on immersive, natural, and sensory second-person descriptions.
 - Describe ONLY what the player perceives. Never invent events.
 - Player traits SHAPE perception. :keen-eyed notices details. :shadow-walker notices shadows/exits.
 - Note entities that are new or changed since last visit.
@@ -391,6 +392,7 @@ Would produce output like:
                  :detail {:target 2 :turn 47}}]}
 
 Rules:
+- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. You must NEVER reference, name, or in any way allude to any game-mechanical traits, stats, dice, or rules in your narrative output text. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', or any specific trait keyword name or what they represent. Focus entirely on immersive, natural, and sensory second-person descriptions of outcomes and consequences.
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - Weigh BROAD player traits more heavily than NARROW NPC traits.
 - Relationship modifies outcome. Positive relationships soften negative actions.
@@ -523,6 +525,7 @@ Would produce output like:
   {:action :talk-to :target \"Hilda\" :prompt \"She had her hand on that cudgel. She might have words for you.\"}]}
 
 Rules:
+- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. You must NEVER reference, name, or in any way allude to any game-mechanical traits, stats, dice, or rules in your narrative output text. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', or any specific trait keyword name or what they represent. Focus entirely on immersive, natural, and sensory second-person descriptions.
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - Weave turn events into coherent narrative. Don't just list them.
 - Describe emergent changes (reputation, relationships) naturally.

@@ -9,5 +9,5 @@
    :sword-saint
    :proleptic-blur},
  :world/seed nil,
- :llm/default-model "deepseek/deepseek-v4-flash",
- :llm/max-tokens 65536}
+  :llm/default-model "inception/mercury-2",
+  :llm/max-tokens 16384}
