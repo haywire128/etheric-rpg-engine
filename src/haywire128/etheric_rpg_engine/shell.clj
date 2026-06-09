@@ -578,13 +578,15 @@
   "Store a Witness discovery as a behavioral pattern in the database.
    Attaches the pattern to the player entity so it can be perceived downstream."
   [db discovery player-id]
-  (let [pattern-val (or (:pattern discovery) (:pattern-name discovery) "unknown")
+  (let [p-id (or player-id
+                 (ffirst (d/q '[:find ?e :where [?e :entity/type :player]] (d/db (:conn db)))))
+        pattern-val (or (:pattern discovery) (:pattern-name discovery) "unknown")
         pattern-name-str (if (keyword? pattern-val) (name pattern-val) (str pattern-val))
         entity {:behavior/pattern-name pattern-name-str
                 :behavior/groundedness (or (:groundedness discovery) 0.5)
                 :behavior/discovered-at (or (:discovered-at discovery) 0)
                 :behavior/description (or (:description discovery) (pr-str discovery))
-                :behavior/player-ref player-id}]
+                :behavior/player-ref p-id}]
     (c/transact! db [entity])
     {:stored 1 :pattern entity}))
 
@@ -592,11 +594,13 @@
   "Log a player action to the database for action history tracking.
    Called after each player action completes."
   [db action-map player-id]
-  (let [entity {:action/turn (or (:turn action-map) 0)
+  (let [p-id (or player-id
+                 (ffirst (d/q '[:find ?e :where [?e :entity/type :player]] (d/db (:conn db)))))
+        entity {:action/turn (or (:turn action-map) 0)
                 :action/type (or (:type action-map) :unknown)
                 :action/target (or (:target action-map) "none")
                 :action/outcome (pr-str (or (:outcome action-map) {}))
-                :action/player-ref player-id}]
+                :action/player-ref p-id}]
     (c/transact! db [entity])
     {:logged 1 :action entity}))
 
@@ -755,8 +759,11 @@ NOTE: The names, locations, and NPC details below are ILLUSTRATIVE ONLY. Do NOT 
   (env-set !env :player-id player-id)
   ;; 1. Cartographer generates world taxonomy
   (let [tax (sub-rlm {:genre genre :parent {:path [] :depth 0 :name \"Eldoria\" :traits #{:ancient}} :target-depth 3} :cartographer)
-        stored (store-taxonomy! (:nodes tax) [] 1)
-        flat-nodes (:nodes stored)
+        ;; CRITICAL: store-taxonomy! persists and transforms the nested nodes.
+        ;; You MUST bind and use the flat nodes returned by (store-taxonomy! (:nodes tax) [] 1) as shown below!
+        ;; NEVER use (:nodes tax) directly as it lacks path-str, depth, and taxonomy namespace keys!
+        stored-taxonomy (store-taxonomy! (:nodes tax) [] 1)
+        flat-nodes (:nodes stored-taxonomy)
         ;; Find a leaf settlement or landmark node (depth 3) to place the player
         starter-node (or (first (filter #(= 3 (:taxonomy/depth %)) flat-nodes))
                          (first flat-nodes))
