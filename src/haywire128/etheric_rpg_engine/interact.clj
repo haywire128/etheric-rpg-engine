@@ -40,7 +40,9 @@
         ;; Transact player entity
         player-entity {:entity/type :player
                        :entity/name (or (:player/name config) "Aldric")
-                       :trait/set (or (:player/traits config) #{})}
+                       :trait/set (or (:player/traits config) #{})
+                       :entity/age 6
+                       :entity/turns-played 0}
         _ (d/transact conn [player-entity])
         ;; Query player entity ID
         player-id (ffirst (d/q '[:find ?e :where [?e :entity/type :player]] (d/db conn)))
@@ -72,20 +74,8 @@
         (d/release conn)
         {:success false :error "No active game session. Run /start first."})
       (let [config (get @(:atom env) :config)
-            last-narrative (or (c/env-get env :last-narrative)
-                               (:narrative (c/env-get env :final))
-                               (:player/hook config))
-            last-action    (c/env-get env :last-action)
-            prompt {:type :action
-                    :player-input (c/parse-player-input input-str)
-                    :raw input-str
-                    :last-turn {:action last-action
-                                :narrative last-narrative}}
-            ;; Step RLM loop
-            result (shell/rlm-loop llm db env prompt :max-iterations 10)]
-        (when (:success result)
-          (c/env-set env :last-action input-str)
-          (c/env-set env :last-narrative (get-in result [:result :narrative])))
+            game-state {:llm llm :db db :env env :config config}
+            result (shell/player-action game-state input-str)]
         (serialize-env env)
         (d/release conn)
         result))))

@@ -158,7 +158,17 @@ Locations are not coordinate points but hierarchical semantic paths stored as ve
 Perceptual range is dynamically computed using taxonomy depths. When the player enters a location, the `Scout` JIT-describes the vicinity up to a dynamic perceptual depth.
 
 ### Dynamic Reputation & Behavioral Scan
-At the end of every turn, the `Witness` scans the raw action history in Datahike to discover emergent patterns (e.g., `pays-in-exact-change` or `attempted-intimidation`). If a pattern reaches high groundedness, it emerges as a permanent behavioral component attached to the player character, modifying future NPC dispositions and Oracle check outcomes.
+### Persistent Character Aging
+To represent long-term narrative progression, the engine dynamically updates and persists the player character's age:
+* **Turn & Age Logging**: The player entity records `:entity/turns-played` and `:entity/age`.
+* **Automated Progression**: Every successful player action increments `turns-played`. After $N$ turns (configured via `:player/turns-per-age-increment` in `config.edn`), the player's age is incremented.
+* **Contextual Parametrization**: Current age is fed to the `Scout`, `Oracle`, and `Scribe` agents, allowing the prose and action suggestions to grow organically with the player.
+
+### Emergent NPC Priorities (Motivations)
+Rather than relying on static prompt descriptions to establish NPC behaviors and relationships, the engine utilizes a data-driven priorities system:
+* **Schema**: Every NPC holds a `:npc/priorities` attribute containing an EDN-serialized vector of priority maps (e.g. `{:priority/type :care-for-entity, :priority/target-name "Sage", :priority/reason :familial, :priority/urgency :high}`).
+* **Types & Motivations**: Supported priority types include `:care-for-entity`, `:maintain-routine`, `:protect-entity`, `:serve-faction`, and `:pursue-goal`.
+* **Emergent Relationships**: Start-up scenarios (such as caregiving during convalescence) emerge dynamically at runtime based on generated NPC priorities rather than rigid prompt configurations.
 
 ---
 

@@ -192,6 +192,45 @@ Rules:
 - Limit size: Generate exactly 1 or 2 sibling nodes at each level (do not generate 3 or more siblings). Keep the tree compact and focused to avoid bracket matching errors.
 - Do not truncate the children or node listings. Produce a complete world map.")
 
+(def chronicler-prompt
+  "You are the Chronicler function.
+
+Signature:
+(fn chronicler [{:keys [genre taxonomy]}]
+  ;; Returns: {:lore-nodes [...]})
+
+Purpose:
+Create the AOT (Ahead-of-Time) 'Web of Interest' — a network of lore nodes representing people, places, and things of interest within the generated world taxonomy. These nodes connect characters, locations, and items with rich history, hidden truths, and potential plot hooks.
+The player must not be presented with these hooks immediately; instead, they will be trickled JIT (Just-in-Time) and organically, and only trigger significant plot hooks if the player directly enters or interacts with that specific node of interest.
+
+IMPORTANT: The following is an **illustrative example** of the expected data shape and structure.
+Do NOT copy this data literally. Generate content appropriate to the actual input context, genre, and situation.
+
+For example, the structure looks like:
+{:genre :medieval-fantasy
+ :taxonomy [{:name \"Eldor's Hold\" :node-type :settlement :traits #{:frontier :fortified} :atmosphere \"...\"}]}
+
+Would produce output like:
+{:lore-nodes
+ [{:lore/name \"Lord Aldric\"
+   :lore/type :person
+   :lore/description \"The aging governor of Eldor's Hold. He secretly fears the moon-blood eclipse and has been desperately seeking relics to bolster the town's defenses.\"
+   :lore/connections [\"Heartstone\" \"Eldor's Hold\"]
+   :lore/hook \"Lord Aldric reveals that the Heartstone was stolen from the crypt beneath the ruined chapel, and begs you to retrieve it before the eclipse.\"}
+  {:lore/name \"Heartstone\"
+   :lore/type :thing
+   :lore/description \"An ancient, pulsing amber crystal once used to ward off dark magic. It was stored in the crypt beneath the ruined chapel.\"
+   :lore/connections [\"Ruined Chapel\" \"Lord Aldric\"]
+   :lore/hook \"As you touch the Heartstone, a surge of raw, warm energy courses through you, fragmenting your amnesia for a brief second with a vision of a grand laboratory.\"}]}
+
+Rules:
+- Generate 3 to 5 lore nodes that form a cohesive lore web for the starter region and surrounding locations.
+- Connect people, places, and things together in the :lore/connections list (using their names).
+- Keep descriptions focused on backstory, atmosphere, and secrets.
+- Keep the :lore/hook highly specific to that node, describing a major revelation or interaction when the player actively engages/interacts with it.
+- Respond with EDN map containing :lore-nodes ONLY. No explanation. No markdown fences.
+- Crucial: Ensure that all open vectors '[', maps '{', and lists '(' are correctly balanced and closed. Double-check all closing brackets.")
+
 (def harbinger-prompt
   "You are the Harbinger function.
 
@@ -241,6 +280,12 @@ Rules:
 - Include :stubbed? as true or false for every entity.
 - Mark entities you are uncertain about as :stubbed? true (Forger will deepen them).
 - THIRD-WALL GUARD RAIL: Trait keywords in :trait/set and :trait/registry are internal data only. They must never appear in any string field (atmosphere, description, appearance). These keywords shape behavior at runtime — they are never spoken aloud or written as prose.
+- PRIORITIES: Every NPC entity MUST include an `:npc/priorities` key whose value is a pr-str'd vector of priority maps. Each priority map has:
+  - `:priority/type` — keyword, one of: `:care-for-entity`, `:maintain-routine`, `:protect-entity`, `:serve-faction`, `:pursue-goal`
+  - `:priority/target-name` — string, the name of the entity or faction this priority concerns (omit if no specific target)
+  - `:priority/reason` — keyword, one of: `:professional`, `:familial`, `:altruistic`, `:obligatory`, `:fearful`, `:mercenary`
+  - `:priority/urgency` — keyword, one of: `:critical`, `:high`, `:medium`, `:low`
+- RECOVERING PLAYER RULE: If the context includes `:recovering-player true`, at least one generated NPC MUST have a `:care-for-entity` priority targeting the player (`:priority/target-name` set to the player name). The `:priority/reason` and the NPC's profession, name, and appearance must emerge from the genre and world context — do NOT assume `:caregiver` profession or any specific identity. A guard, a parent, a priest, a droid, a fellow patient, or anyone else may be the one caring for the player.
 - Respond with EDN map containing :entities ONLY.")
 
 (def forger-prompt
@@ -294,7 +339,7 @@ Signature:
 Purpose:
 Construct the second-person sensory experience of a location from the player's eyes.
 CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') at all times. Never use first-person perspective ('I' / 'my' / 'me').
-CRITICAL: On the first turn (Turn 1), you are passed a `:hook` string in the prompt. You MUST weave this starting inciting-incident hook, their current equipment/traits, and their immediate objective seamlessly into your starting description so they have full context on how they got here and what they must do next!
+CRITICAL: On the first turn (Turn 1), frame the character's waking up as a transition from a surreal, abstract fever dream of \"The Ether\" (where their player name and traits like those in `:traits` were chosen) to waking in their current location as a child of the age specified in `:age` under `:player` burning with fever and suffering from amnesia. Derive the sleeping surface, room quality, and setting details entirely from the `:location` data and the `:entities` already present — do NOT assume a type. The scene must feature whoever is present in `:entities` with a caring or attending disposition toward the player character. Focus purely on the immediate environment, the child's feverish state, the attending presence(s), and the complete loss of memory — there must be no mention of external quests or global threats.
 CRITICAL: You are passed the location's `:lineage` vector (e.g., `[:Eldoria :Whispering-Woods :Elderglen]`), JIT-populated `:entities` (characters/items present in the area), and `:surrounding` (surrounding sister macro-biomes/landmarks visible on the horizon). You MUST weave these specific names, atmospheres, characters, and neighboring lands into your description. Tell the player EXACTLY what named settlement they are in, what parent region or kingdom it belongs to, what characters are standing nearby, and what distant landmarks or sister regions are visible on the horizon to explore. They must have absolute clarity on who they are, where they are, and what their options are!
 Player traits modulate what is noticed and how.
 Player behavioral patterns influence how NPCs perceive and react to the player.
@@ -348,7 +393,7 @@ Rules:
 - Stubbed entities get brief, surface-level description only.
 - Relationship quality colors perception. Friendly faces feel welcoming. Wary ones feel distant.
 - Player behavioral patterns influence NPC reactions. If the player has patterns like \"attempted-intimidation\", NPCs may be wary. If they have \"helped-strangers\", NPCs may be trusting. Reference these patterns naturally in the narrative when relevant.
-- CRITICAL: NO QUEST EXPOSITION DUMPS. Do NOT surface quest objectives, mission briefings, or narrative hooks as narrated interiority (e.g. do NOT write 'The council's summons still rings in your ears: retrieve the Heartstone before...'). The :hook provides authorial context for world atmosphere only — weave urgency and stakes into the *environment itself* (a notice board, nervous townsfolk, a distant dark horizon), not into summarized exposition. Quest details belong in NPC dialogue or discovered documents, never in opening scene-setting prose.
+- CRITICAL: NO QUEST EXPOSITION DUMPS & ORGANIC LORE TRICKLING. You are passed the `:lore-web` containing the region's lore. Do NOT surface quest objectives, mission briefings, or narrative hooks as narrated interiority. Weave hints of the lore nodes connected to the current location or the caregiver's speech subtly and organically into the environment (e.g., the caregiver might sigh and mutter about a name in passing, or the player might notice an old, dusty tome or symbol in the room). Significant plot hooks (such as ancient quests or global threats) must be strictly gatekept — ONLY reveal a lore node's :lore/hook if the player explicitly inspects or interacts with that specific node of interest.
 - Respond with EDN map ONLY. No explanation. No markdown fences.")
 
 (def oracle-prompt
@@ -408,6 +453,8 @@ Would produce output like:
 Rules:
 - CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Traits are **invisible mechanical substrate** — they weight the resolution but must NEVER appear in the narrative text as words, names, or concepts. Do NOT write ':silver-tongued', 'keen-eyed', or any trait name or paraphrase. Instead, show the consequence in the world: the crowd parts, the lock yields, the blade finds a gap. The dice outcome informs the degree of success or failure — never mention dice, fortune, folly, rolls, stats, attributes, or mechanics. The player must experience a living world, not a game system.
 - If :actor :meta is present, treat it as invisible authorial truth. Weave its essence into how the action resolves — as felt consequence, never as named fact. A character with unconscious channeling might find a sword blow land harder than physics explains, not because the narrative says so, but because the world simply bends slightly.
+- CRITICAL: CHILDHOOD PERSPECTIVE. The actor is a child of the age specified in :age under :actor (e.g. 6 years old, or slightly older as turns progress) recovering from amnesia. Scale all physical and social outcomes accordingly. A child of that age cannot punch out guards, swing greatswords, or lift heavy boulders, but their struggles can evoke adult concern, pity, or patience. If they channel magic, it should manifest in an unpredictable, uncontrolled, or raw manner.
+- CRITICAL: LORE-GATEKEEPING. You are passed a `:lore-web` containing lore nodes. Under no circumstances should you volunteer plot hooks or exposition. If and only if the player directly asks about or interacts with a specific Lore Node (e.g. asking the caregiver about a name in the lore web, or inspecting a specific object), you MUST incorporate that node's `:lore/hook` description into the narrative outcome.
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - CRITICAL: REPETITIVE ACTIONS & CONSEQUENCE ESCALATION. Analyze the player's action history and patterns. If the player repeats similar actions (e.g. repeated physical assault/harassment like slapping NPCs, repeated 'look around' commands, or repeating the same question/request), you MUST escalate the consequences. Repetitive annoying or hostile actions must result in escalating NPC anger, physical retaliation, guard alerts, and decreasing relationship strength (relationship-delta). Repetitive searching/inspection (like looking around repeatedly) must yield diminishing returns (noticing nothing new), boredom, or raise NPC suspicion and annoyance.
 - Weigh BROAD player traits more heavily than NARROW NPC traits.
@@ -556,6 +603,7 @@ Rules:
 - **Weave NPC Actions**: You are passed `:npc-actions` representing autonomous actions taken by nearby characters. You MUST weave these actions and their motives/reasons seamlessly into the narrative. Ensure the physical actions are logical and spatially correct (e.g. if a guard draws a sword to protect/shield the captain, he draws it in front of the captain or steps between the captain and the threat, not drawing it *toward* the captain).
 - **Prose Quality & Natural Relations**: Translate mechanical relationships, reputation levels, and stances (e.g., `:wary`, `:hostile`) into elegant, natural, grammatical English prose. Avoid awkward mechanical phrasing or literal translations (e.g. do NOT write 'watches you war a distance' or 'watches you wary distance'; instead write 'watches you from a wary distance' or 'keeps a watchful, wary distance from you').
 - Describe emergent changes (reputation, relationships) naturally.
+- CRITICAL: CHILDHOOD PERSPECTIVE & LORE INTEGRATION. Keep the final narrative, tone, and action suggestions styled from the perspective of a child of the age specified in :age under :player (e.g. 6 years old, or slightly older as turns progress) recovering from amnesia. Suggestions must be simple, intuitive child-like actions derived from what is actually present in the scene (e.g., 'ask [the attending person] about your name', 'look at the carving on the wall', 'rest', 'peek out the window') rather than complex tactical or narrative objectives. Do not invent quest hooks — only describe facts/revelations that actually occurred in the turn events.
 - Suggest 2-3 natural next actions. Don't force the player's hand.
 - Never resolve future events. Only describe consequences of what ALREADY happened.
 - CRITICAL EDN VALUE CONSTRAINTS: All descriptive text/phrase values (e.g. suggestions, prompts, reasons, names, actions, change descriptions, etc.) MUST be strings (wrapped in double quotes \"\"), not keywords (which begin with a colon :). Keywords must ONLY be used for strict system keys (like :type, :narrative, :from, :to, :delta, :action, etc.). Keywords must NEVER contain spaces (e.g., never generate :more aggressive or :relationship-reputation-shift).
@@ -568,6 +616,7 @@ Rules:
    Max-tokens defaults to default-max-tokens unless specified per-role.
    Used by shell's LLM protocol implementation to dispatch sub-RLM calls."
   {:cartographer {:prompt cartographer-prompt :max-tokens 131072}
+   :chronicler   {:prompt chronicler-prompt   :max-tokens 65536}
    :harbinger    {:prompt harbinger-prompt    :max-tokens 65536}
    :forger       {:prompt forger-prompt       :max-tokens 65536}
    :scout        {:prompt scout-prompt        :max-tokens 32768}

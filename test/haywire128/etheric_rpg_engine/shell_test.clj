@@ -1,5 +1,6 @@
 (ns haywire128.etheric-rpg-engine.shell-test
   (:require [clojure.test :refer :all]
+            [datahike.api :as d]
             [haywire128.etheric-rpg-engine.core :as c]
             [haywire128.etheric-rpg-engine.shell :as shell]))
 
@@ -329,3 +330,40 @@
         (is (:success result))
         (is (= [:Eldoria :Mistveil :RiverholdSquare] (c/env-get env :current-location)))
         (is (= "You arrive at Riverhold Square." (get-in result [:result :narrative])))))))
+
+(deftest player-age-progression-test
+  (testing "Player age increments every N turns"
+    (let [db (shell/in-memory-db)
+          player-eid 1
+          _ (c/transact! db {player-eid {:entity/type :player
+                                         :entity/name "Sage"
+                                         :trait/set   #{}
+                                         :entity/age 6
+                                         :entity/turns-played 0}})
+          mock-root-code "(finalize! !env {:narrative \"You rest.\" :success true})"
+          llm (reify c/LLM
+                (complete [_ messages _model _opts]
+                  {:content mock-root-code :cost 0}))
+          env (shell/rlm-env {:type :action :raw "rest"})
+          _ (c/env-set env :player-id player-eid)
+          config {:player/id player-eid
+                  :player/turns-per-age-increment 3}
+          game-state {:llm llm :db db :env env :config config}]
+      ;; Turn 1
+      (let [res1 (shell/player-action game-state "rest")
+            player1 (c/q-entity db player-eid)]
+        (is (:success res1))
+        (is (= 1 (:entity/turns-played player1)))
+        (is (= 6 (:entity/age player1))))
+      ;; Turn 2
+      (let [res2 (shell/player-action game-state "rest")
+            player2 (c/q-entity db player-eid)]
+        (is (:success res2))
+        (is (= 2 (:entity/turns-played player2)))
+        (is (= 6 (:entity/age player2))))
+      ;; Turn 3 - should trigger age increment to 7
+      (let [res3 (shell/player-action game-state "rest")
+            player3 (c/q-entity db player-eid)]
+        (is (:success res3))
+        (is (= 3 (:entity/turns-played player3)))
+        (is (= 7 (:entity/age player3)))))))

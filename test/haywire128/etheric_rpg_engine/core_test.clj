@@ -141,10 +141,10 @@
 ;; Role Registry
 ;; ══════════════════════════════════════════════════════════════════════════════
 
-(deftest role-registry-has-all-seven-roles
-  (is (= 7 (count core/role-registry)))
+(deftest role-registry-has-all-eight-roles
+  (is (= 8 (count core/role-registry)))
   (are [role] (contains? core/role-registry role)
-    :cartographer :harbinger :forger :scout :oracle :witness :scribe))
+    :cartographer :chronicler :harbinger :forger :scout :oracle :witness :scribe))
 
 (deftest role-registry-entries-have-prompt-and-model
   (doseq [[role entry] core/role-registry]

@@ -51,3 +51,17 @@ Model tiering, Scout caching, trait relevance filtering, stub batching, no off-s
 ## 7. Error Recovery
 
 PREPL errors → metadata → root LLM retries. Timeouts. OpenRouter backoff.
+
+## 8. Character Age Tracking
+
+- **Persistent State**: The player entity tracks `:entity/age` (starting at 6) and `:entity/turns-played` in the Datahike database.
+- **Automated Aging**: The engine increments `:entity/turns-played` on every successful action and increments `:entity/age` every $N$ turns (configured via `:player/turns-per-age-increment` in `config.edn`).
+- **Dynamic Parameterization**: Current age is injected into Scout, Oracle, and Scribe prompt contexts, ensuring player narrative and action suggestions scale with age progression.
+
+## 9. NPC Priorities (Emergent Relationships)
+
+- **Priorities Schema**: Every NPC holds a `:npc/priorities` attribute containing an EDN-serialized vector of priority maps.
+- **Priority Structure**: Each map defines a motivation: `{:priority/type kw, :priority/target-name str, :priority/reason kw, :priority/urgency kw}`.
+  - Types: `:care-for-entity`, `:maintain-routine`, `:protect-entity`, `:serve-faction`, `:pursue-goal`
+  - Reasons: `:professional`, `:familial`, `:altruistic`, `:obligatory`, `:fearful`, `:mercenary`
+- **Emergent Scenarios**: The start-up caregiving relationship is driven via the `recovering-player` context rule in Harbinger, generating NPCs with `:care-for-entity` priorities rather than hardcoding names or roles in the prompts.

@@ -92,7 +92,18 @@
   (q-action-history [_ _player-id _window]
     [])
   (transact! [_ tx-data]
-    (swap! state merge tx-data)))
+    (let [tx-map (if (map? tx-data)
+                   tx-data
+                   (into {} (map (fn [ent]
+                                   [(or (:db/id ent) (:db/id (meta ent))) (dissoc ent :db/id)])
+                                 tx-data)))]
+      (swap! state (fn [old-state]
+                     (reduce-kv (fn [m k v]
+                                  (if (and (map? v) (map? (get m k)))
+                                    (update m k merge v)
+                                    (assoc m k v)))
+                                old-state
+                                tx-map))))))
 
 (defn in-memory-db
   "Factory for in-memory WorldDB (testing/development)."
@@ -192,6 +203,8 @@
    {:db/ident :entity/personality :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
    {:db/ident :entity/appearance :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
    {:db/ident :entity/attributes :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   {:db/ident :entity/age :db/valueType :db.type/long :db/cardinality :db.cardinality/one}
+   {:db/ident :entity/turns-played :db/valueType :db.type/long :db/cardinality :db.cardinality/one}
    {:db/ident :stubbed? :db/valueType :db.type/boolean :db/cardinality :db.cardinality/one}
    {:db/ident :trait/set :db/valueType :db.type/keyword :db/cardinality :db.cardinality/many}
    {:db/ident :trait/registry :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
@@ -236,7 +249,17 @@
    {:db/ident :stance/source :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
    {:db/ident :stance/target :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
    {:db/ident :stance/type :db/valueType :db.type/keyword :db/cardinality :db.cardinality/one}
-   {:db/ident :stance/intensity :db/valueType :db.type/double :db/cardinality :db.cardinality/one}])
+   {:db/ident :stance/intensity :db/valueType :db.type/double :db/cardinality :db.cardinality/one}
+   {:db/ident :lore/name :db/valueType :db.type/string :db/cardinality :db.cardinality/one :db/unique :db.unique/identity}
+   {:db/ident :lore/type :db/valueType :db.type/keyword :db/cardinality :db.cardinality/one}
+   {:db/ident :lore/description :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   {:db/ident :lore/connections :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   {:db/ident :lore/hook :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   ;; NPC motivational priorities — EDN-serialized vector of priority maps.
+   ;; Each map: {:priority/type kw :priority/target-name str :priority/reason kw :priority/urgency kw}
+   ;; :priority/type values: :care-for-entity :maintain-routine :protect-entity :serve-faction :pursue-goal
+   ;; :priority/reason values: :professional :familial :altruistic :obligatory :fearful :mercenary
+   {:db/ident :npc/priorities :db/valueType :db.type/string :db/cardinality :db.cardinality/one}])
 
 (defn datahike-db
   "Factory for Datahike-backed WorldDB. Creates an in-memory database.
@@ -501,29 +524,52 @@
   (let [path-str (or (:path-str loc) (:name loc) "unknown")
         traits (or (:traits loc) #{})
         traits-set (if (coll? traits) (set (map keyword traits)) #{})
-        entity {:location/path-str path-str
-                :location/name (or (:name loc) "unknown")
-                :location/loc-type (or (:loc-type loc) :unknown)
-                :location/traits traits-set
-                :location/description (or (:description loc) "")}]
+        entities-data (map (fn [e]
+                             (let [etraits (or (:traits e) #{})
+                                   etraits-set (if (coll? etraits) (set (map keyword etraits)) #{})]
+                               {:entity/type (or (:type e) :npc)
+                                :entity/name (or (:name e) "unknown")
+                                :entity/profession (or (:profession e) :unknown)
+                                :entity/personality (pr-str (or (:personality e) {}))
+                                :entity/appearance (pr-str (or (:appearance e) {}))
+                                :entity/attributes (pr-str (or (:attributes e) {}))
+                                :trait/set etraits-set
+                                :trait/registry (pr-str (or (:trait-info e) {}))}))
+                           (:entities loc))
+        entity (cond-> {:location/path-str path-str
+                        :location/name (or (:name loc) "unknown")
+                        :location/loc-type (or (:loc-type loc) :unknown)
+                        :location/traits traits-set
+                        :location/description (or (:description loc) "")}
+                 (seq entities-data) (assoc :location/entities entities-data))]
     (c/transact! db [entity])
     entity))
 
 (defn store-entity!
-  "Store a forged entity into the database."
-  [db ent]
-  (let [traits (or (:traits ent) #{})
-        traits-set (if (coll? traits) (set (map keyword traits)) #{})
-        entity {:entity/type (or (:type ent) :npc)
-                :entity/name (or (:name ent) "unknown")
-                :entity/profession (or (:profession ent) :unknown)
-                :entity/personality (pr-str (or (:personality ent) {}))
-                :entity/appearance (pr-str (or (:appearance ent) {}))
-                :entity/attributes (pr-str (or (:attributes ent) {}))
-                :trait/set traits-set
-                :trait/registry (pr-str (or (:trait-info ent) {}))}]
-    (c/transact! db [entity])
-    entity))
+  "Store a forged entity into the database. Optionally link it to a location path."
+  ([db ent] (store-entity! db ent nil))
+  ([db ent loc-path]
+   (let [traits (or (:traits ent) #{})
+         traits-set (if (coll? traits) (set (map keyword traits)) #{})
+         entity {:db/id "temp-ent"
+                 :entity/type (or (:type ent) :npc)
+                 :entity/name (or (:name ent) "unknown")
+                 :entity/profession (or (:profession ent) :unknown)
+                 :entity/personality (pr-str (or (:personality ent) {}))
+                 :entity/appearance (pr-str (or (:appearance ent) {}))
+                 :entity/attributes (pr-str (or (:attributes ent) {}))
+                 :trait/set traits-set
+                 :trait/registry (pr-str (or (:trait-info ent) {}))}]
+     (if loc-path
+       (let [path-str (if (string? loc-path) loc-path (str/join "/" (map name loc-path)))
+             ;; Find existing location entity-id
+             loc-eid (some (fn [[e p]] (when (= p path-str) e))
+                           (d/q '[:find ?e ?p :where [?e :location/path-str ?p]] (d/db (:conn db))))]
+         (if loc-eid
+           (c/transact! db [entity {:db/id loc-eid :location/entities ["temp-ent"]}])
+           (c/transact! db [(dissoc entity :db/id)])))
+       (c/transact! db [(dissoc entity :db/id)]))
+     (dissoc entity :db/id))))
 
 (defn store-discovery!
   "Store a Witness discovery as a behavioral pattern in the database.
@@ -550,6 +596,27 @@
                 :action/player-ref player-id}]
     (c/transact! db [entity])
     {:logged 1 :action entity}))
+
+(defn store-lore!
+  "Store a lore node entity into the database."
+  [db lore-node]
+  (let [entity {:lore/name (:lore/name lore-node)
+                :lore/type (keyword (:lore/type lore-node))
+                :lore/description (:lore/description lore-node)
+                :lore/connections (pr-str (or (:lore/connections lore-node) []))
+                :lore/hook (:lore/hook lore-node)}]
+    (c/transact! db [entity])
+    entity))
+
+(defn q-all-lore
+  "Query all lore entities."
+  [db]
+  (let [db-val (d/db (:conn db))
+        res (d/q '[:find ?e :where [?e :lore/name]] db-val)]
+    (map (fn [[eid]]
+           (let [pulled (d/pull db-val '[:lore/name :lore/type :lore/description :lore/connections :lore/hook] eid)]
+             (update pulled :lore/connections #(if % (clojure.edn/read-string %) []))))
+         res)))
 
 (defn q-stances
   "Query all stance relations in the database. Returns a sequence of maps:
@@ -606,7 +673,8 @@ CRITICAL: DYNAMIC CONTEXT RESOLUTION & DYNAMIC ACTIONS
 - You must query the player entity dynamically:
     (let [player (q-entity !db (env-get !env :player-id))
           player-name (:entity/name player)
-          player-traits (set (:trait/set player))]
+          player-traits (set (:trait/set player))
+          player-age (or (:entity/age player) 6)]
       ...)
 - You must query the current location dynamically:
     (let [loc-path (env-get !env :current-location)
@@ -616,6 +684,14 @@ CRITICAL: DYNAMIC CONTEXT RESOLUTION & DYNAMIC ACTIONS
           loc-atmosphere (:location/atmosphere location)]
       ...)
 - Parse the player's action dynamically using `(:player-input start-prompt)` and `(:raw start-prompt)`. Do NOT assume the action type is always `:intimidate` or `:unknown`.
+
+CRITICAL: GAME START UP PROCEDURES
+- For game START (when resolving Turn 0/initial startup):
+  1. Call Cartographer to generate the world geography.
+  2. Call Chronicler to generate the AOT Lore Web, and store all generated lore nodes using `store-lore!`.
+  3. Place the player in a contextually appropriate recovery location (a sub-location of the starter settlement). The location's name, type, and traits must emerge from the world genre, player class, and social context — do NOT use a fixed name like 'Caregiver's Cottage'. Store with `store-location!`.
+  4. JIT-populate this location using Harbinger, passing `{:recovering-player true}` in the context. Harbinger will generate one or more NPCs. At least one MUST have `:npc/priorities` containing a `:care-for-entity` entry targeting the player. The number, profession, name, appearance, and `:priority/reason` (e.g. `:professional`, `:familial`, `:altruistic`) are fully emergent from genre and world context. Store all entities with `store-entity!`.
+  5. Call Scout to perceive the initial scene inside the recovery location (incorporating all generated entities and the lore web) and call `finalize!` to end the turn.
 
 CRITICAL: MOVEMENT & TRAVEL RESOLUTION
 - If the player's input indicates moving, walking, or traveling to a new location (e.g., \"walk to the square\", \"carriage travel to Riverhold\", \"go to the inn\"):
@@ -645,13 +721,15 @@ IMPORTANT: The following are ALREADY BOUND and available in your scope:
   q-action-history - function: (q-action-history !db player-id window) - queries action history for player
   q-stances - function: (q-stances !db) - queries all active relational stances in the world
   set-stance-by-names! - function: (set-stance-by-names! !db source-name target-name type intensity) - sets or updates a stance relationship
-
+  store-lore! - function: (store-lore! node) - stores lore web nodes
+  q-all-lore - function: (q-all-lore !db) - queries all lore web nodes
 
 DO NOT try to define or rebind these. Just use them directly.
 DO NOT use transact! directly - use store-taxonomy!, store-location!, or store-entity! instead.
 
 Available roles for sub-rlm:
   :cartographer - generate world taxonomy (returns {:nodes [...]})
+  :chronicler - generate AOT lore web (returns {:lore-nodes [...]})
   :harbinger - generate location entities
   :forger - forge detailed entities
   :scout - perceive location (returns {:narrative \"...\"})
@@ -663,15 +741,15 @@ The examples below show the **structure** of expected code. Generate code approp
 to the actual game state and player input. Do not hardcode the example data.
 The active player ID is passed in the starting prompt under `[:player :db/id]`. You should store it in the environment using `(env-set !env :player-id player-id)` during startup, and retrieve it using `(env-get !env :player-id)` in subsequent turns. Do not hardcode `:player-id-here` or any other placeholders.
 
-EXAMPLE for game START — generate world geography, find starter node, JIT-populate starting characters with Harbinger, find neighboring regions, and perceive via Scout:
+EXAMPLE for game START — generate world geography, AOT lore web, place player in a contextually appropriate recovery location, JIT-populate attendants (with care-for-entity priorities) via Harbinger, and perceive via Scout.
+NOTE: The names, locations, and NPC details below are ILLUSTRATIVE ONLY. Do NOT copy them. Generate content appropriate to the actual genre, player class, and social context:
 
 (env-set !env :phase :world-gen)
 (let [start-prompt (env-get !env :prompt)
       player-id (get-in start-prompt [:player :db/id])
-      hook (:hook start-prompt)
-      genre (or (get-in start-prompt [:player :player/genre]) :medieval-fantasy)]
+      ;; Genre must come from player config — validated at startup, never defaulted here
+      genre (get-in start-prompt [:player :player/genre])]
   (env-set !env :player-id player-id)
-  (env-set !env :hook hook)
   ;; 1. Cartographer generates world taxonomy
   (let [tax (sub-rlm {:genre genre :parent {:path [] :depth 0 :name \"Eldoria\" :traits #{:ancient}} :target-depth 3} :cartographer)
         stored (store-taxonomy! (:nodes tax) [] 1)
@@ -680,39 +758,58 @@ EXAMPLE for game START — generate world geography, find starter node, JIT-popu
         starter-node (or (first (filter #(= 3 (:taxonomy/depth %)) flat-nodes))
                          (first flat-nodes))
         starter-path-str (:taxonomy/path-str starter-node)
-        starter-path (map keyword (clojure.string/split starter-path-str #\"/\"))]
-    (env-set !env :current-location starter-path)
-    ;; 2. Harbinger JIT-populates starting characters/objects for starter location
-    (let [harbinger-res (sub-rlm {:genre genre
-                                  :location {:name (:taxonomy/name starter-node)
-                                             :loc-type (:taxonomy/node-type starter-node)
-                                             :traits (:taxonomy/traits starter-node)}
-                                  :npc-patterns (clojure.edn/read-string (:taxonomy/npc-patterns starter-node))}
-                                 :harbinger)
-          ;; Store starting entities
-          _ (doseq [ent (:entities harbinger-res)]
-              (store-entity! ent))
-          ;; Find sister regions (same depth/level) as surrounding areas
-          sister-nodes (filter #(and (= 2 (:taxonomy/depth %))
-                                     (clojure.string/starts-with? (:taxonomy/path-str %) (name (first starter-path))))
-                               flat-nodes)
-          patterns (q-player-patterns !db player-id)
-          scout (sub-rlm {:player {:name \"Sage\" :traits #{:keen-eyed} :trait-info {:keen-eyed {:breadth :broad :domain :perception}}}
-                          :location {:name (:taxonomy/name starter-node)
-                                     :loc-type (:taxonomy/node-type starter-node)
-                                     :traits (:taxonomy/traits starter-node)
-                                     :atmosphere (:taxonomy/atmosphere starter-node)
-                                     :lineage starter-path}
-                          :surrounding (map #(select-keys % [:taxonomy/name :taxonomy/node-type :taxonomy/traits :taxonomy/atmosphere]) (take 3 sister-nodes))
-                          :entities (:entities harbinger-res)
-                          :relationships []
-                          :time  {:of-day :dawn :weather :misty :elapsed \"first moments\"}
-                          :player-patterns patterns
-                          :hook hook}
-                         :scout)]
-      (finalize! !env {:narrative (:narrative scout) :success true}))))
+        starter-path (map keyword (clojure.string/split starter-path-str #\"/\"))
+        ;; 2. Chronicler generates AOT Lore Web / Web of Interest
+        lore-res (sub-rlm {:genre genre :taxonomy flat-nodes} :chronicler)
+        _ (doseq [node (:lore-nodes lore-res)]
+            (store-lore! node))
+        ;; 3. Place player in a contextually appropriate recovery location.
+        ;; Name, type, and slug must reflect genre/class (e.g. :infirmary, :solar, :med-bay).
+        ;; Do NOT use :caregivers-cottage or any fixed name -- derive from world context.
+        recovery-slug :infirmary  ;; REPLACE with a genre/class-appropriate keyword slug
+        recovery-path (conj (vec starter-path) recovery-slug)
+        _ (env-set !env :current-location recovery-path)
+        _ (store-location! {:name \"REPLACE-WITH-CONTEXTUAL-NAME\"
+                            :loc-type :infirmary
+                            :traits #{:warm :sheltered}
+                            :description \"REPLACE-WITH-CONTEXTUAL-DESCRIPTION\"
+                            :path-str (clojure.string/join \"/\" (map name recovery-path))})
+        ;; 4. JIT-populate via Harbinger. At least one NPC MUST have :npc/priorities
+        ;; with :care-for-entity targeting the player. Profession/name/reason are emergent.
+        harbinger-res (sub-rlm {:genre genre
+                                :location {:name \"REPLACE\" :loc-type :infirmary :traits #{:warm :sheltered}}
+                                :npc-patterns []
+                                :recovering-player true
+                                :player-name player-name
+                                :player-class (get-in (env-get !env :prompt) [:player :player/meta])}
+                               :harbinger)
+        stored-attendants (mapv #(store-entity! % recovery-path) (:entities harbinger-res))
+        ;; Find sister regions (same depth/level) as surrounding areas
+        sister-nodes (filter #(and (= 2 (:taxonomy/depth %))
+                                   (clojure.string/starts-with? (:taxonomy/path-str %) (name (first starter-path))))
+                             flat-nodes)
+        patterns (q-player-patterns !db player-id)
+        player (q-entity !db player-id)
+        player-name (:entity/name player)
+        player-traits (set (:trait/set player))
+        player-age (or (:entity/age player) 6)
+        recovery-loc (q-location !db recovery-path)
+        scout (sub-rlm {:player {:name player-name :traits player-traits :age player-age :trait-info {}}
+                        :location {:name (:location/name recovery-loc)
+                                   :loc-type (:location/loc-type recovery-loc)
+                                   :traits (set (:location/traits recovery-loc))
+                                   :atmosphere (:location/atmosphere recovery-loc)
+                                   :lineage recovery-path}
+                        :surrounding (map #(select-keys % [:taxonomy/name :taxonomy/node-type :taxonomy/traits :taxonomy/atmosphere]) (take 3 sister-nodes))
+                        :entities stored-attendants
+                        :relationships []
+                        :time {:of-day :DERIVE-FROM-WORLD :weather :DERIVE-FROM-WORLD :elapsed \\\"waking up\\\"}
+                        :player-patterns patterns
+                        :lore-web (:lore-nodes lore-res)}
+                       :scout)]
+    (finalize! !env {:narrative (:narrative scout) :success true})))
 
-EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run Witness to discover patterns, then Scribe to synthesize:
+EXAMPLE for player ACTION — resolve an action dynamically querying the DB, including stances and lore web, run Witness, and then Scribe to synthesize:
 
 (let [player-id (env-get !env :player-id)
       start-prompt (env-get !env :prompt)
@@ -722,6 +819,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
       player (q-entity !db player-id)
       player-name (:entity/name player)
       player-traits (set (:trait/set player))
+      player-age (or (:entity/age player) 6)
       loc-path (env-get !env :current-location)
       location (q-location !db loc-path)
       loc-name (:location/name location)
@@ -729,6 +827,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
       loc-atmosphere (:location/atmosphere location)
       patterns (q-player-patterns !db player-id)
       stances (q-stances !db)
+      lore-web (q-all-lore !db)
       dice (cast-dice)
       ;; 1. Retrieve and resolve all entities in current location
       ents (keep #(q-entity !db (:db/id %)) (:location/entities location))
@@ -737,8 +836,8 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
                                (when (and (#{:npc :object} (:entity/type e))
                                           (or (clojure.string/includes? (clojure.string/lower-case raw-input) (clojure.string/lower-case (:entity/name e)))
                                               (clojure.string/includes? (clojure.string/lower-case raw-input) (name (:entity/type e)))))
-                                 e))
-                             ents)
+                                  e))
+                              ents)
       ;; 3. Retrieve relationships with the target
       relationship (when target-candidate
                      (some (fn [r]
@@ -747,7 +846,6 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
                                  r)))
                            (q-rels !db player-id)))
       target-name (or (:entity/name target-candidate) \"Environment\")
-      ;; 4. Resolve the player's action via Oracle
       result (sub-rlm {:action {:type (or (:type parsed-input) :unknown)
                                  :intent raw-input
                                  :raw raw-input}
@@ -755,6 +853,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
                        :last-turn last-turn
                        :actor {:name player-name
                                :traits player-traits
+                               :age player-age
                                :trait-info {}}
                        :target (if target-candidate
                                  {:name (:entity/name target-candidate)
@@ -768,13 +867,13 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
                        :relationship {:strength (or (:relationship/strength relationship) 0.0)}
                        :actor-reputation :neutral
                        :player-patterns patterns
-                       :stances stances}
+                       :stances stances
+                       :lore-web lore-web}
                       :oracle)]
   ;; Update stances from Oracle result
   (doseq [su (:stance-updates result)]
-    (set-stance-by-names! !db (:source su) (:target su) (:type su) (:intensity su)))
-  ;; Log action history
-  (log-action! {:turn (or (:turn last-turn) 1) :type (or (:type parsed-input) :unknown) :target target-name :outcome result} player-id)
+    (set-stance-by-names! !db (:source su) (:target su) (:type su) (:intensity su))
+    (log-action! {:turn (or (:turn last-turn) 1) :type (or (:type parsed-input) :unknown) :target target-name :outcome result} player-id))
   ;; Witness analyzes behavioral patterns dynamically
   (let [hist (q-action-history !db player-id 100)
         witness-res (sub-rlm {:player {:name player-name :traits player-traits :current-reputation :neutral}
@@ -789,13 +888,14 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
       (store-discovery! disc player-id))
     ;; Extract relationship deltas from Oracle side-effects
     (let [rel-deltas (filter #(= (:type %) :relationship-delta) (:side-effects result))
-          scribe-res (sub-rlm {:player {:name player-name :traits player-traits :reputation :neutral}
-                                :turn-events [{:action {:type (or (:type parsed-input) :unknown) :target target-name} :outcome result}]
+          scribe-res (sub-rlm {:player {:name player-name :traits player-traits :age player-age :reputation :neutral}
+                                :turn-events [{:action :unknown :target target-name} :outcome result]
                                 :npc-actions (:npc-actions result)
                                 :behavioral-scan witness-res
                                 :relationship-deltas rel-deltas
                                 :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
-                                :last-turn last-turn}
+                                :last-turn last-turn
+                                :lore-web lore-web}
                                :scribe)]
       (finalize! !env {:narrative (:narrative scribe-res) :success true}))))
 
@@ -853,16 +953,18 @@ Call finalize! to end the turn. Max " (str c/default-max-iterations) " iteration
                    "      transact! (fn [_ d] ((requiring-resolve '" c-ns "/transact!) " s-ns "/*rlmdb* d))\n"
                    "      store-taxonomy! (fn [nodes parent-path depth] ((requiring-resolve '" s-ns "/store-taxonomy!) " s-ns "/*rlmdb* nodes parent-path depth))\n"
                    "      store-location! (fn [loc] ((requiring-resolve '" s-ns "/store-location!) " s-ns "/*rlmdb* loc))\n"
-                   "      store-entity! (fn [ent] ((requiring-resolve '" s-ns "/store-entity!) " s-ns "/*rlmdb* ent))\n"
+                   "      store-entity! (fn ([ent] ((requiring-resolve '" s-ns "/store-entity!) " s-ns "/*rlmdb* ent)) ([ent loc] ((requiring-resolve '" s-ns "/store-entity!) " s-ns "/*rlmdb* ent loc)))\n"
                    "      store-discovery! (fn [discovery player-id] ((requiring-resolve '" s-ns "/store-discovery!) " s-ns "/*rlmdb* discovery player-id))\n"
                    "      log-action! (fn [action-map player-id] ((requiring-resolve '" s-ns "/log-action!) " s-ns "/*rlmdb* action-map player-id))\n"
                    "      q-range (fn [_ p d] ((requiring-resolve '" c-ns "/q-range) " s-ns "/*rlmdb* p d))\n"
                    "      q-rels (fn [_ id] ((requiring-resolve '" c-ns "/q-rels) " s-ns "/*rlmdb* id))\n"
                    "      q-player-patterns (fn [_ player-id] ((requiring-resolve '" c-ns "/q-player-patterns) " s-ns "/*rlmdb* player-id))\n"
                    "      q-action-history (fn [_ player-id window] ((requiring-resolve '" c-ns "/q-action-history) " s-ns "/*rlmdb* player-id window))\n"
-                    "      q-stances (fn [_] ((requiring-resolve '" s-ns "/q-stances) " s-ns "/*rlmdb*))\n"
-                    "      set-stance-by-names! (fn [_ src tgt typ intensity] ((requiring-resolve '" s-ns "/set-stance-by-names!) " s-ns "/*rlmdb* src tgt typ intensity))]\n"
-                   "  " code-str ")")
+                     "      q-stances (fn [_] ((requiring-resolve '" s-ns "/q-stances) " s-ns "/*rlmdb*))\n"
+                     "      set-stance-by-names! (fn [_ src tgt typ intensity] ((requiring-resolve '" s-ns "/set-stance-by-names!) " s-ns "/*rlmdb* src tgt typ intensity))\n"
+                     "      store-lore! (fn [node] ((requiring-resolve '" s-ns "/store-lore!) " s-ns "/*rlmdb* node))\n"
+                     "      q-all-lore (fn [_] ((requiring-resolve '" s-ns "/q-all-lore) " s-ns "/*rlmdb*))]\n"
+                    "  " code-str ")")
           eval-fut (future
                      (binding [*rlmenv* env *rlmdb* db *rlmlm* llm]
                        (eval (read-string wrapped))))
@@ -1088,7 +1190,9 @@ Write ONLY the single-paragraph narrative. No explanation, no intro, no markdown
         ;; Transact player entity into DB
         player-entity {:entity/type :player
                        :entity/name player-name
-                       :trait/set player-traits}
+                       :trait/set player-traits
+                       :entity/age 6
+                       :entity/turns-played 0}
         _       (c/transact! db [player-entity])
         ;; Query player entity ID
         player-id (ffirst (d/q '[:find ?e :where [?e :entity/type :player]] (d/db (:conn db))))
@@ -1124,5 +1228,21 @@ Write ONLY the single-paragraph narrative. No explanation, no intro, no markdown
     (when (:success result)
       ;; Store the dynamic outcome in env for the NEXT turn!
       (c/env-set env :last-action input-raw)
-      (c/env-set env :last-narrative (get-in result [:result :narrative])))
+      (c/env-set env :last-narrative (get-in result [:result :narrative]))
+      ;; Increment turn count & potentially update age
+      (let [player-id (or (c/env-get env :player-id)
+                          (ffirst (d/q '[:find ?e :where [?e :entity/type :player]] (d/db (:conn db)))))
+            player    (c/q-entity db player-id)
+            current-turns (or (:entity/turns-played player) 0)
+            next-turns (inc current-turns)
+            current-age (or (:entity/age player) 6)
+            interval (or (:player/turns-per-age-increment config)
+                         (:turns-per-age-increment config)
+                         10)
+            next-age (if (zero? (mod next-turns interval))
+                       (inc current-age)
+                       current-age)]
+        (c/transact! db [{:db/id player-id
+                          :entity/turns-played next-turns
+                          :entity/age next-age}])))
     result))
