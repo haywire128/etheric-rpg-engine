@@ -1,0 +1,10 @@
+{:player/name "AeroTestPlayer",
+ :player/genre :sci-fi,
+ :player/traits
+ #{:imperceptible-edge
+   :arcane-resonance
+   :unyielding-adaptation
+   :proleptic-blur},
+ :world/seed nil,
+ :llm/default-model "inception/mercury-2",
+ :llm/max-tokens 16384}

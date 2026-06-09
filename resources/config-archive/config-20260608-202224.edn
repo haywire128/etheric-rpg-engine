@@ -1,0 +1,6 @@
+{:player/name "AeroTestPlayer",
+ :player/genre :sci-fi,
+ :player/traits #{:hacker :rain-slicked :neon-drenched},
+ :world/seed nil,
+ :llm/default-model "deepseek/deepseek-v4-pro",
+ :llm/max-tokens 65536}

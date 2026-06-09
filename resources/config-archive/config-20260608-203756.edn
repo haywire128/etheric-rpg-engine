@@ -1,0 +1,6 @@
+{:player/name "AeroTestPlayer",
+ :player/genre :sci-fi,
+ :player/traits #{:hacker :rain-slicked :neon-drenched},
+ :world/seed nil,
+ :llm/default-model "inception/mercury-2",
+ :llm/max-tokens 16384}

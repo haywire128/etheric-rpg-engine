@@ -1,0 +1,7 @@
+{:player/name #or [#env PLAYER_NAME "Aldric"]
+ :player/genre #or [#env PLAYER_GENRE :medieval-fantasy]
+ :player/traits #profile {:default #{}
+                          :custom #{:keen-eyed :silver-tongued}}
+ :world/seed #or [#env WORLD_SEED nil]
+ :llm/default-model "deepseek/deepseek-v4-pro"
+ :llm/max-tokens 65536}

@@ -1,0 +1,7 @@
+{:player/name "Kyle",
+ :player/genre :medieval-fantasy,
+ :player/traits
+ #{:inspiring-mood :hidden-arcana-innate-sword-god :future-smear},
+ :world/seed nil,
+ :llm/default-model "inception/mercury-2",
+ :llm/max-tokens 16384}

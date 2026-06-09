@@ -1,0 +1,6 @@
+{:player/name "AeroTestPlayer",
+ :player/genre :sci-fi,
+ :player/traits #{},
+ :world/seed nil,
+ :llm/default-model "deepseek/deepseek-v4-pro",
+ :llm/max-tokens 8192}

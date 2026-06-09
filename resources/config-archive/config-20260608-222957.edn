@@ -1,0 +1,10 @@
+{:player/name "Sage",
+ :player/genre :medieval-fantasy,
+ :player/traits
+ #{:imperceptible-edge
+   :arcane-resonance
+   :unyielding-adaptation
+   :proleptic-blur},
+ :world/seed nil,
+ :llm/default-model "deepseek/deepseek-v4-flash",
+ :llm/max-tokens 65536}

@@ -1,0 +1,7 @@
+{:player/name "AeroTestPlayer",
+ :player/genre :sci-fi,
+ :player/traits
+ #{:inspiring-mood :hidden-arcana-innate-sword-god :future-smear},
+ :world/seed nil,
+ :llm/default-model "inception/mercury-2",
+ :llm/max-tokens 16384}
