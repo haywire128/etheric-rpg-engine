@@ -71,11 +71,21 @@
       (do
         (d/release conn)
         {:success false :error "No active game session. Run /start first."})
-      (let [prompt {:type :action
+      (let [config (get @(:atom env) :config)
+            last-narrative (or (c/env-get env :last-narrative)
+                               (:player/hook config)
+                               (get-in (c/env-get env :final) [:result :narrative]))
+            last-action    (c/env-get env :last-action)
+            prompt {:type :action
                     :player-input (c/parse-player-input input-str)
-                    :raw input-str}
+                    :raw input-str
+                    :last-turn {:action last-action
+                                :narrative last-narrative}}
             ;; Step RLM loop
             result (shell/rlm-loop llm db env prompt :max-iterations 10)]
+        (when (:success result)
+          (c/env-set env :last-action input-str)
+          (c/env-set env :last-narrative (get-in result [:result :narrative])))
         (serialize-env env)
         (d/release conn)
         result))))

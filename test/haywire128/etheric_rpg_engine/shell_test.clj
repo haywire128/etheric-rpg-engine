@@ -309,3 +309,23 @@
           scrubbed (shell/scrub-third-wall raw-text ctx)]
       (is (not (clojure.string/includes? scrubbed "sword-saint")))
       (is (clojure.string/includes? scrubbed "mastery of the blade")))))
+
+(deftest travel-movement-updates-current-location
+  (testing "Movement action updates the current location in env"
+    (let [db (shell/in-memory-db)
+          _ (c/transact! db {1 {:entity/type :player
+                                :entity/name "Sage"
+                                :trait/set   #{:keen-eyed}}})
+          player-id 1
+          ;; Mock LLM returns code to update current location and finalize
+          mock-root-code "(do (env-set !env :current-location [:Eldoria :Mistveil :RiverholdSquare]) (finalize! !env {:narrative \"You arrive at Riverhold Square.\" :success true}))"
+          llm (reify c/LLM
+                (complete [_ messages _model _opts]
+                  {:content mock-root-code :cost 0}))
+          env (shell/rlm-env {:type :action :raw "go to the Riverhold Square"})]
+      (c/env-set env :player-id player-id)
+      (c/env-set env :current-location [:Eldoria :Mistveil :Inn])
+      (let [result (shell/rlm-loop llm db env {:type :action :raw "go to the Riverhold Square"} :max-iterations 3)]
+        (is (:success result))
+        (is (= [:Eldoria :Mistveil :RiverholdSquare] (c/env-get env :current-location)))
+        (is (= "You arrive at Riverhold Square." (get-in result [:result :narrative])))))))

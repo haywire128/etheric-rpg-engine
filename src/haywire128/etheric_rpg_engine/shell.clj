@@ -537,6 +537,30 @@ Output executable Clojure code ONLY. No markdown, no explanation.
 
 CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. All generated narrative shown to the player must NEVER reference, name, or in any way allude to traits, stats, dice, rolls, or rules. When orchestrating sub-RLM roles (like :scout, :oracle, :scribe), guarantee that no game-mechanical terms, dice terminology (fortune, folly, roll, dice, twenty-sided), or specific trait keyword names ever leak into player-facing text.
 
+CRITICAL: DYNAMIC CONTEXT RESOLUTION & DYNAMIC ACTIONS
+- Do NOT hardcode placeholder values like \"Aldric\", \"Kyle\", \"Guard\", `:intimidate`, or \"Misty Plains\" from the examples.
+- You must query the player entity dynamically:
+    (let [player (q-entity !db (env-get !env :player-id))
+          player-name (:entity/name player)
+          player-traits (set (:trait/set player))]
+      ...)
+- You must query the current location dynamically:
+    (let [loc-path (env-get !env :current-location)
+          location (q-location !db loc-path)
+          loc-name (:location/name location)
+          loc-traits (set (:location/traits location))
+          loc-atmosphere (:location/atmosphere location)]
+      ...)
+- Parse the player's action dynamically using `(:player-input start-prompt)` and `(:raw start-prompt)`. Do NOT assume the action type is always `:intimidate` or `:unknown`.
+
+CRITICAL: MOVEMENT & TRAVEL RESOLUTION
+- If the player's input indicates moving, walking, or traveling to a new location (e.g., \"walk to the square\", \"carriage travel to Riverhold\", \"go to the inn\"):
+  1. Retrieve the player's current location path from env.
+  2. Determine the destination path. Check the database and taxonomy to see if a location with that name exists as a child or sibling node. If so, build the destination path vector.
+  3. Update the player's location in env: `(env-set !env :current-location destination-path)`.
+  4. If this destination has not been JIT-populated as a location in the database (i.e. `(q-location !db destination-path)` returns nil), invoke the `:harbinger` sub-agent to JIT-generate the entities/atmosphere for that location, and use `store-entity!` to save them.
+  5. Resolve the movement narrative using `:scout` (to perceive the new scene) or `:oracle` (if the journey itself has risks/actions), and proceed with the standard Scribe/Witness flow to finalize the turn.
+
 IMPORTANT: The following are ALREADY BOUND and available in your scope:
   !env - the environment atom (use env-get, env-set, finalize!)
   !db - the database
@@ -575,7 +599,7 @@ The active player ID is passed in the starting prompt under `[:player :db/id]`. 
 EXAMPLE for game START — generate world geography, find starter node, JIT-populate starting characters with Harbinger, find neighboring regions, and perceive via Scout:
 
 (env-set !env :phase :world-gen)
-(let [start-prompt (c/env-get !env :prompt)
+(let [start-prompt (env-get !env :prompt)
       player-id (get-in start-prompt [:player :db/id])
       hook (:hook start-prompt)
       genre (or (get-in start-prompt [:player :player/genre]) :medieval-fantasy)]
@@ -606,7 +630,7 @@ EXAMPLE for game START — generate world geography, find starter node, JIT-popu
                                      (clojure.string/starts-with? (:taxonomy/path-str %) (name (first starter-path))))
                                flat-nodes)
           patterns (q-player-patterns !db player-id)
-          scout (sub-rlm {:player {:name \"Kyle\" :traits #{:keen-eyed} :trait-info {:keen-eyed {:breadth :broad :domain :perception}}}
+          scout (sub-rlm {:player {:name \"Sage\" :traits #{:keen-eyed} :trait-info {:keen-eyed {:breadth :broad :domain :perception}}}
                           :location {:name (:taxonomy/name starter-node)
                                      :loc-type (:taxonomy/node-type starter-node)
                                      :traits (:taxonomy/traits starter-node)
@@ -621,26 +645,46 @@ EXAMPLE for game START — generate world geography, find starter node, JIT-popu
                          :scout)]
       (finalize! !env {:narrative (:narrative scout) :success true}))))
 
-EXAMPLE for player ACTION — resolve an action, run Witness to discover patterns, then Scribe to synthesize:
+EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run Witness to discover patterns, then Scribe to synthesize:
 
-(let [dice (cast-dice)
-      player-id (env-get !env :player-id)
-      start-prompt (c/env-get !env :prompt)
+(let [player-id (env-get !env :player-id)
+      start-prompt (env-get !env :prompt)
+      raw-input (:raw start-prompt)
+      parsed-input (:player-input start-prompt)
       last-turn (:last-turn start-prompt)
+      player (q-entity !db player-id)
+      player-name (:entity/name player)
+      player-traits (set (:trait/set player))
+      loc-path (env-get !env :current-location)
+      location (q-location !db loc-path)
+      loc-name (:location/name location)
+      loc-traits (set (:location/traits location))
+      loc-atmosphere (:location/atmosphere location)
       patterns (q-player-patterns !db player-id)
-      result (sub-rlm {:action {:type :intimidate :intent \"scare the guard\"} :dice dice
-                        :last-turn last-turn
-                        :actor {:name \"Aldric\" :traits #{:keen-eyed} :trait-info {:keen-eyed {:breadth :broad :domain :perception}}}
-                        :target {:name \"Guard\" :traits #{} :trait-info {}}
-                        :location {:traits #{}}
-                        :relationship {:strength 0.0} :actor-reputation :neutral
-                        :player-patterns patterns}
-                       :oracle)]
+      dice (cast-dice)
+      ;; Resolve the player's action via Oracle
+      result (sub-rlm {:action {:type (or (:type parsed-input) :unknown)
+                                 :intent raw-input
+                                 :raw raw-input}
+                       :dice dice
+                       :last-turn last-turn
+                       :actor {:name player-name
+                               :traits player-traits
+                               :trait-info {}}
+                       :target {:name \"Target Entity\" :traits #{} :trait-info {}}
+                       :location {:name loc-name
+                                  :traits loc-traits
+                                  :atmosphere loc-atmosphere
+                                  :lineage loc-path}
+                       :relationship {:strength 0.0}
+                       :actor-reputation :neutral
+                       :player-patterns patterns}
+                      :oracle)]
   ;; Log action history
-  (log-action! {:turn 1 :type :intimidate :target \"Guard\" :outcome result} player-id)
+  (log-action! {:turn (or (:turn last-turn) 1) :type (or (:type parsed-input) :unknown) :target \"Target\" :outcome result} player-id)
   ;; Witness analyzes behavioral patterns dynamically
   (let [hist (q-action-history !db player-id 100)
-        witness-res (sub-rlm {:player {:name \"Aldric\" :traits #{:keen-eyed} :current-reputation :neutral}
+        witness-res (sub-rlm {:player {:name player-name :traits player-traits :current-reputation :neutral}
                                :action-history hist
                                :current-relationships []
                                :known-patterns patterns
@@ -651,11 +695,11 @@ EXAMPLE for player ACTION — resolve an action, run Witness to discover pattern
     (doseq [disc (:discoveries witness-res)]
       (store-discovery! disc player-id))
     ;; Scribe synthesizes everything into narrative
-    (let [scribe-res (sub-rlm {:player {:name \"Aldric\" :traits #{:keen-eyed} :reputation :neutral}
-                                :turn-events [{:action {:type :intimidate :target \"Guard\"} :outcome result}]
+    (let [scribe-res (sub-rlm {:player {:name player-name :traits player-traits :reputation :neutral}
+                                :turn-events [{:action {:type (or (:type parsed-input) :unknown) :target \"Target\"} :outcome result}]
                                 :behavioral-scan witness-res
                                 :relationship-deltas []
-                                :location {:name \"Misty Plains\" :traits #{:misty}}
+                                :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
                                 :last-turn last-turn}
                                :scribe)]
       (finalize! !env {:narrative (:narrative scribe-res) :success true}))))

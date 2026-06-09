@@ -203,7 +203,7 @@ Only output this block when the configuration conversation is fully complete and
    Returns when the session ends (player quits or EOF)."
   [config]
   (cli/print-system (str "Initializing world for " (:player/name config)
-                          " (" (some-> (:player/genre config) name) ")..."))
+                         " (" (some-> (:player/genre config) name) ")..."))
   (cli/print-system "Turn 1: Invoking RLM Loop for game startup (Cartographer & Scout)...")
   (let [game-map (try
                    (new-game config)
