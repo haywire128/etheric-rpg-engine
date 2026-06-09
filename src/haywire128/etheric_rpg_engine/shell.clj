@@ -259,7 +259,8 @@
    ;; Each map: {:priority/type kw :priority/target-name str :priority/reason kw :priority/urgency kw}
    ;; :priority/type values: :care-for-entity :maintain-routine :protect-entity :serve-faction :pursue-goal
    ;; :priority/reason values: :professional :familial :altruistic :obligatory :fearful :mercenary
-   {:db/ident :npc/priorities :db/valueType :db.type/string :db/cardinality :db.cardinality/one}])
+    {:db/ident :npc/priorities :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+    {:db/ident :player/inferred-motivation :db/valueType :db.type/string :db/cardinality :db.cardinality/one}])
 
 (defn datahike-db
   "Factory for Datahike-backed WorldDB. Creates an in-memory database.
@@ -842,6 +843,20 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, inc
       dice (cast-dice)
       ;; 1. Retrieve and resolve all entities in current location
       ents (keep #(q-entity !db (:db/id %)) (:location/entities location))
+      safe-read (fn [x]
+                  (cond
+                    (nil? x) nil
+                    (string? x) (try (edn/read-string x) (catch Exception _ x))
+                    :else x))
+      entities-clean (mapv (fn [e]
+                             {:name (:entity/name e)
+                              :type (:entity/type e)
+                              :profession (:entity/profession e)
+                              :appearance (safe-read (:entity/appearance e))
+                              :personality (safe-read (:entity/personality e))
+                              :traits (set (:trait/set e))
+                              :priorities (safe-read (:npc/priorities e))})
+                           ents)
       ;; 2. Dynamically identify target NPC/object from raw player input
       target-candidate (some (fn [e]
                                (when (and (#{:npc :object} (:entity/type e))
@@ -862,10 +877,11 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, inc
                                  :raw raw-input}
                        :dice dice
                        :last-turn last-turn
-                       :actor {:name player-name
-                               :traits player-traits
-                               :age player-age
-                               :trait-info {}}
+                        :actor {:name player-name
+                                :traits player-traits
+                                :age player-age
+                                :trait-info {}
+                                :inferred-motivation (:player/inferred-motivation player)}
                        :target (if target-candidate
                                  {:name (:entity/name target-candidate)
                                   :traits (set (:trait/set target-candidate))
@@ -878,6 +894,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, inc
                        :relationship {:strength (or (:relationship/strength relationship) 0.0)}
                        :actor-reputation :neutral
                        :player-patterns patterns
+                       :entities entities-clean
                        :stances stances
                        :lore-web lore-web}
                       :oracle)]
@@ -897,9 +914,16 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, inc
     ;; Store any newly discovered patterns
     (doseq [disc (:discoveries witness-res)]
       (store-discovery! disc player-id))
+    (when-let [motivation (:motivation witness-res)]
+      (c/transact! !db [{:db/id player-id :player/inferred-motivation motivation}]))
     ;; Extract relationship deltas from Oracle side-effects
     (let [rel-deltas (filter #(= (:type %) :relationship-delta) (:side-effects result))
-          scribe-res (sub-rlm {:player {:name player-name :traits player-traits :age player-age :reputation :neutral}
+          scribe-res (sub-rlm {:player {:name player-name
+                                        :traits player-traits
+                                        :age player-age
+                                        :reputation :neutral
+                                        :inferred-motivation (or (:motivation witness-res)
+                                                                 (:player/inferred-motivation player))}
                                :turn-events [{:action {:type (or (:type parsed-input) :unknown)
                                                        :target target-name
                                                        :intent raw-input}
@@ -911,6 +935,7 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, inc
                                :relationship-deltas rel-deltas
                                :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
                                :last-turn last-turn
+                               :entities entities-clean
                                :lore-web lore-web}
                               :scribe)]
       (finalize! !env {:narrative (:narrative scribe-res) :success true}))))
