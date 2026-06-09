@@ -252,7 +252,7 @@
 (defrecord AtomRLMEnv [atom]
   c/RLMEnv
   (env-get [_ key]
-    (or (get @atom key) (get-in @atom [:variables key])))
+    (or (get-in @atom [:variables key]) (get @atom key)))
   (env-set [_ key val]
     (swap! atom assoc-in [:variables key] val)
     nil)
@@ -262,7 +262,8 @@
   (finalized? [_]
     (some? (:final @atom)))
   (summary [_]
-    (let [{:keys [variables prompt]} @atom]
+    (let [{:keys [variables]} @atom
+          prompt (or (:prompt variables) (:prompt @atom))]
       {:prompt-type (:type prompt)
        :prompt-length (count (:raw prompt))
        :variables (into {}
@@ -276,7 +277,7 @@
 (defn rlm-env
   "Factory for RLMEnv. Seed with initial prompt."
   [prompt]
-  (->AtomRLMEnv (atom {:prompt prompt :variables {} :hist [] :iteration 0})))
+  (->AtomRLMEnv (atom {:variables {:prompt prompt} :hist [] :iteration 0})))
 
 (defn restore-rlm-env
   "Create an RLMEnv from a restored state map."
@@ -427,15 +428,22 @@
         opts {:max-tokens max-tokens}
         api-res (complete-with-retry llm messages model opts 0 3)
         {:keys [content cost error]} api-res]
+    (log-debug (str "  [Sub-RLM " role-kw "] Input: " (pr-str context)))
+    (log-debug (str "  [Sub-RLM " role-kw "] Output Raw: " content))
     (if content
       (try
-        (let [parsed (extract-edn content)]
-          (if (map? parsed)
-            (scrub-all-strings parsed context)
-            parsed))
+        (let [parsed (extract-edn content)
+              res (if (map? parsed)
+                    (scrub-all-strings parsed context)
+                    parsed)]
+          (log-debug (str "  [Sub-RLM " role-kw "] Output Parsed: " (pr-str res)))
+          res)
         (catch Exception e
+          (log-debug (str "  [Sub-RLM " role-kw "] Output Parse Error: " (.getMessage e)))
           {:parse-error (.getMessage e) :raw content :cost cost}))
-      {:error (or error :empty-content) :cost cost})))
+      (do
+        (log-debug (str "  [Sub-RLM " role-kw "] Output Error: " (or error :empty-content)))
+        {:error (or error :empty-content) :cost cost}))))
 
 (defn flatten-taxonomy
   "Flatten nested Cartographer nodes into schema-compliant flat entities.
@@ -662,7 +670,24 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
       loc-atmosphere (:location/atmosphere location)
       patterns (q-player-patterns !db player-id)
       dice (cast-dice)
-      ;; Resolve the player's action via Oracle
+      ;; 1. Retrieve all entities in current location
+      all-ents (q-range !db loc-path 100)
+      ;; 2. Dynamically identify target NPC/object from raw player input
+      target-candidate (some (fn [e]
+                               (when (and (#{:npc :object} (:entity/type e))
+                                          (or (clojure.string/includes? (clojure.string/lower-case raw-input) (clojure.string/lower-case (:entity/name e)))
+                                              (clojure.string/includes? (clojure.string/lower-case raw-input) (name (:entity/type e)))))
+                                 e))
+                             all-ents)
+      ;; 3. Retrieve relationships with the target
+      relationship (when target-candidate
+                     (some (fn [r]
+                             (let [to-ent (q-entity !db (:relationship/to r))]
+                               (when (= (:entity/name to-ent) (:entity/name target-candidate))
+                                 r)))
+                           (q-rels !db player-id)))
+      target-name (or (:entity/name target-candidate) \"Environment\")
+      ;; 4. Resolve the player's action via Oracle
       result (sub-rlm {:action {:type (or (:type parsed-input) :unknown)
                                  :intent raw-input
                                  :raw raw-input}
@@ -671,17 +696,21 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
                        :actor {:name player-name
                                :traits player-traits
                                :trait-info {}}
-                       :target {:name \"Target Entity\" :traits #{} :trait-info {}}
+                       :target (if target-candidate
+                                 {:name (:entity/name target-candidate)
+                                  :traits (set (:trait/set target-candidate))
+                                  :trait-info {}}
+                                 {:name \"Environment\" :traits #{} :trait-info {}})
                        :location {:name loc-name
                                   :traits loc-traits
                                   :atmosphere loc-atmosphere
                                   :lineage loc-path}
-                       :relationship {:strength 0.0}
+                       :relationship {:strength (or (:relationship/strength relationship) 0.0)}
                        :actor-reputation :neutral
                        :player-patterns patterns}
                       :oracle)]
   ;; Log action history
-  (log-action! {:turn (or (:turn last-turn) 1) :type (or (:type parsed-input) :unknown) :target \"Target\" :outcome result} player-id)
+  (log-action! {:turn (or (:turn last-turn) 1) :type (or (:type parsed-input) :unknown) :target target-name :outcome result} player-id)
   ;; Witness analyzes behavioral patterns dynamically
   (let [hist (q-action-history !db player-id 100)
         witness-res (sub-rlm {:player {:name player-name :traits player-traits :current-reputation :neutral}
@@ -694,11 +723,12 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
     ;; Store any newly discovered patterns
     (doseq [disc (:discoveries witness-res)]
       (store-discovery! disc player-id))
-    ;; Scribe synthesizes everything into narrative
-    (let [scribe-res (sub-rlm {:player {:name player-name :traits player-traits :reputation :neutral}
-                                :turn-events [{:action {:type (or (:type parsed-input) :unknown) :target \"Target\"} :outcome result}]
+    ;; Extract relationship deltas from Oracle side-effects
+    (let [rel-deltas (filter #(= (:type %) :relationship-delta) (:side-effects result))
+          scribe-res (sub-rlm {:player {:name player-name :traits player-traits :reputation :neutral}
+                                :turn-events [{:action {:type (or (:type parsed-input) :unknown) :target target-name} :outcome result}]
                                 :behavioral-scan witness-res
-                                :relationship-deltas []
+                                :relationship-deltas rel-deltas
                                 :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
                                 :last-turn last-turn}
                                :scribe)]
@@ -761,6 +791,8 @@ Call finalize! to end the turn. Max " (str c/default-max-iterations) " iteration
                    "      store-entity! (fn [ent] ((requiring-resolve '" s-ns "/store-entity!) " s-ns "/*rlmdb* ent))\n"
                    "      store-discovery! (fn [discovery player-id] ((requiring-resolve '" s-ns "/store-discovery!) " s-ns "/*rlmdb* discovery player-id))\n"
                    "      log-action! (fn [action-map player-id] ((requiring-resolve '" s-ns "/log-action!) " s-ns "/*rlmdb* action-map player-id))\n"
+                   "      q-range (fn [_ p d] ((requiring-resolve '" c-ns "/q-range) " s-ns "/*rlmdb* p d))\n"
+                   "      q-rels (fn [_ id] ((requiring-resolve '" c-ns "/q-rels) " s-ns "/*rlmdb* id))\n"
                    "      q-player-patterns (fn [_ player-id] ((requiring-resolve '" c-ns "/q-player-patterns) " s-ns "/*rlmdb* player-id))\n"
                    "      q-action-history (fn [_ player-id window] ((requiring-resolve '" c-ns "/q-action-history) " s-ns "/*rlmdb* player-id window))]\n"
                    "  " code-str ")")

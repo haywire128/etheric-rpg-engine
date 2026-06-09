@@ -192,8 +192,8 @@
                    :genre :medieval-fantasy}
           result (shell/sub-rlm llm context :witness)]
       (is (map? result))
-      (is (vector? (:discoveries result)))
-      (is (vector? (:raw-observations result))))))
+      (is (vector? (:discoveries result)) (pr-str result))
+      (is (vector? (:raw-observations result)) (pr-str result)))))
 
 (deftest ^:integration sub-rlm-cartographer-produces-taxonomy
   (if-not (integration-test?)
@@ -205,8 +205,8 @@
                    :target-depth 4}
           result (shell/sub-rlm llm context :cartographer)]
       (is (map? result))
-      (is (vector? (:nodes result)))
-      (is (pos? (count (:nodes result)))))))
+      (is (vector? (:nodes result)) (pr-str result))
+      (is (pos? (count (:nodes result))) (pr-str result)))))
 
 ;; ══════════════════════════════════════════════════════════════════════════════
 ;; Configuration Management (Aero)

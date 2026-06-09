@@ -187,7 +187,10 @@ Rules:
 - Sibling regions must have diverse character.
 - Depth must match target-depth. Leaf = :settlement or :landmark.
 - NPC patterns at (target-depth - 2).
-- Respond with EDN map containing :nodes ONLY. No explanation. No markdown fences.")
+- Respond with EDN map containing :nodes ONLY. No explanation. No markdown fences.
+- Crucial: Ensure that all open vectors '[', maps '{', and lists '(' are correctly balanced and closed. Double-check all closing brackets.
+- Limit size: Generate exactly 1 or 2 sibling nodes at each level (do not generate 3 or more siblings). Keep the tree compact and focused to avoid bracket matching errors.
+- Do not truncate the children or node listings. Produce a complete world map.")
 
 (def harbinger-prompt
   "You are the Harbinger function.
@@ -539,6 +542,7 @@ Rules:
 - Describe emergent changes (reputation, relationships) naturally.
 - Suggest 2-3 natural next actions. Don't force the player's hand.
 - Never resolve future events. Only describe consequences of what ALREADY happened.
+- CRITICAL: EDN FORMATTING AND SYNTAX VALIDITY. You MUST produce a valid Clojure EDN map. Ensure all maps {} and vectors [] are properly balanced and closed. Do not leave any map key or value unclosed. Double-check your syntax before responding.
 - Respond with EDN map ONLY. No explanation. No markdown fences.")
 
 (def role-registry
