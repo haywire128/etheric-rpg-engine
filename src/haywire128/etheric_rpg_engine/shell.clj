@@ -321,7 +321,7 @@
 (defn- extract-trait-keywords
   "Recursively find all keywords under trait-related keys in context."
   [m]
-  (let [trait-keys #{:traits :trait/set :taxonomy/traits :location/traits :player/traits}
+  (let [trait-keys #{:traits :trait/set :player/traits}
         find-traits (fn find-traits [x current-key]
                       (cond
                         (keyword? x) (if (trait-keys current-key) #{x} #{})
@@ -390,8 +390,8 @@
           text-with-traits (reduce (fn [t kw]
                                      (let [n (name kw)
                                            n-spaced (str/replace n #"[-_]" " ")
-                                           rep-n (get trait-replacements n "natural talents")
-                                           rep-spaced (get trait-replacements n-spaced "natural talents")]
+                                           rep-n (get trait-replacements n "")
+                                           rep-spaced (get trait-replacements n-spaced "")]
                                        (-> t
                                            (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n) "\\b")) rep-n)
                                            (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n-spaced) "\\b")) rep-spaced))))

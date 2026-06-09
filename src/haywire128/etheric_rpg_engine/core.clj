@@ -237,6 +237,7 @@ Rules:
 - NPCs get :entity/profession. Items get no profession.
 - Include :stubbed? as true or false for every entity.
 - Mark entities you are uncertain about as :stubbed? true (Forger will deepen them).
+- THIRD-WALL GUARD RAIL: Trait keywords in :trait/set and :trait/registry are internal data only. They must never appear in any string field (atmosphere, description, appearance). These keywords shape behavior at runtime — they are never spoken aloud or written as prose.
 - Respond with EDN map containing :entities ONLY.")
 
 (def forger-prompt
@@ -332,7 +333,7 @@ Would produce output like:
            :atmosphere \"subdued tension beneath the warmth\"}}
 
 Rules:
-- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. You must NEVER reference, name, or in any way allude to any game-mechanical traits, stats, dice, or rules in your narrative output text. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', or any specific trait keyword name or what they represent. Focus entirely on immersive, natural, and sensory second-person descriptions.
+- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Player and NPC traits are **invisible mechanical substrate** — they shape what the player notices and how the world reacts, but they must NEVER appear in the narrative as words, names, or concepts. Do NOT write 'keen-eyed', 'silver-tongued', 'shadow-walker', or any other trait keyword or paraphrase of it. Instead, render traits purely as sensory consequence: a :keen-eyed player notices the blade tucked under the innkeeper's apron; a :silver-tongued player finds the right words coming naturally. The reader must never know a trait system exists. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', 'stat', 'attribute', or 'mechanic' in narrative output.
 - Describe ONLY what the player perceives. Never invent events.
 - Player traits SHAPE perception. :keen-eyed notices details. :shadow-walker notices shadows/exits.
 - Note entities that are new or changed since last visit.
@@ -392,7 +393,7 @@ Would produce output like:
                  :detail {:target 2 :turn 47}}]}
 
 Rules:
-- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. You must NEVER reference, name, or in any way allude to any game-mechanical traits, stats, dice, or rules in your narrative output text. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', or any specific trait keyword name or what they represent. Focus entirely on immersive, natural, and sensory second-person descriptions of outcomes and consequences.
+- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Traits are **invisible mechanical substrate** — they weight the resolution but must NEVER appear in the narrative text as words, names, or concepts. Do NOT write ':silver-tongued', 'keen-eyed', or any trait name or paraphrase. Instead, show the consequence in the world: the crowd parts, the lock yields, the blade finds a gap. The dice outcome informs the degree of success or failure — never mention dice, fortune, folly, rolls, stats, attributes, or mechanics. The player must experience a living world, not a game system.
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - Weigh BROAD player traits more heavily than NARROW NPC traits.
 - Relationship modifies outcome. Positive relationships soften negative actions.
@@ -525,7 +526,7 @@ Would produce output like:
   {:action :talk-to :target \"Hilda\" :prompt \"She had her hand on that cudgel. She might have words for you.\"}]}
 
 Rules:
-- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. You must NEVER reference, name, or in any way allude to any game-mechanical traits, stats, dice, or rules in your narrative output text. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', or any specific trait keyword name or what they represent. Focus entirely on immersive, natural, and sensory second-person descriptions.
+- CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Traits, dice, behavioral patterns, and reputation levels are **invisible mechanical substrate** — they inform the synthesis but must NEVER appear in narrative text as words, names, or concepts. Do NOT write ':notorious', 'keen-eyed', 'attempted-intimidation', or any mechanical term. Translate everything into felt consequence: a reputation precedes the player as rumor or wariness; a behavioral pattern manifests as a habit others have begun to notice. The player must feel the world reacting — never feel they are inside a game system.
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - Weave turn events into coherent narrative. Don't just list them.
 - Describe emergent changes (reputation, relationships) naturally.
