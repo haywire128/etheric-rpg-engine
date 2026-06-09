@@ -16,6 +16,5 @@
              :flaw
              "Hidden brilliance can lead to isolation when I choose not to reveal it."},
  :world/seed nil,
- :player/turns-per-age-increment 10,
  :llm/default-model "inception/mercury-2",
  :llm/max-tokens 16384}

@@ -475,7 +475,7 @@ Rules:
 - :degree is :none, :partial, :full, or :critical.
 - :magnitude-applied reflects how much of the dice magnitude actually manifested.
 - Side effects describe what CHANGED in the world. The caller applies them.
-- Never resolve actions beyond the immediate physical/social scope.
+- Never resolve actions beyond the immediate physical/social scope (except for sleep/unconsciousness/waiting transitions as explicitly mandated in the TRANSITIONS & TIME PASSAGE rule above).
 - CRITICAL EDN VALUE CONSTRAINTS: All descriptive text/phrase values (e.g. reasons, names, actions, change descriptions, etc.) MUST be strings (wrapped in double quotes \"\"), not keywords (which begin with a colon :). Keywords must ONLY be used for strict system keys (like :type, :narrative, :from, :to, :delta, :action, etc.). Keywords must NEVER contain spaces (e.g., never generate :more aggressive or :relationship-reputation-shift).
 - Respond with EDN map ONLY.")
 
@@ -615,7 +615,7 @@ Rules:
 - Describe emergent changes (reputation, relationships) naturally.
 - CRITICAL: CHILDHOOD PERSPECTIVE & LORE INTEGRATION. Keep the final narrative, tone, and action suggestions styled from the perspective of a child of the age specified in :age under :player (e.g. 6 years old, or slightly older as turns progress) recovering from amnesia. Suggestions must be simple, intuitive child-like actions derived from what is actually present in the scene (e.g., 'ask [the attending person] about your name', 'look at the carving on the wall', 'rest', 'peek out the window') rather than complex tactical or narrative objectives. Do not invent quest hooks — only describe facts/revelations that actually occurred in the turn events.
 - Suggest 2-3 natural next actions. Don't force the player's hand.
-- Never resolve future events. Only describe consequences of what ALREADY happened.
+- Never resolve future events (except for time passage/sleep/unconsciousness transitions as explicitly mandated in the TRANSITIONS & TIME PASSAGE rule above). Only describe consequences of what ALREADY happened.
 - CRITICAL EDN VALUE CONSTRAINTS: All descriptive text/phrase values (e.g. suggestions, prompts, reasons, names, actions, change descriptions, etc.) MUST be strings (wrapped in double quotes \"\"), not keywords (which begin with a colon :). Keywords must ONLY be used for strict system keys (like :type, :narrative, :from, :to, :delta, :action, etc.). Keywords must NEVER contain spaces (e.g., never generate :more aggressive or :relationship-reputation-shift).
 - CRITICAL: EDN FORMATTING AND SYNTAX VALIDITY. You MUST produce a valid Clojure EDN map. Ensure all maps {} and vectors [] are properly balanced and closed. Do not leave any map key or value unclosed. Double-check your syntax before responding.
 - Respond with EDN map ONLY. No explanation. No markdown fences.")
