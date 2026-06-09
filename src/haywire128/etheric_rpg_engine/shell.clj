@@ -920,9 +920,13 @@ Call finalize! to end the turn. Max " (str c/default-max-iterations) " iteration
 Speak directly to the player in the second-person perspective ('you' / 'your') at all times. Never use first-person ('I') or third-person ('he'/'she').
 Establish how they got here, their starting status/equipment based on their traits, and a clear immediate objective appropriate to their custom genre.
 Write ONLY the single-paragraph narrative. No explanation, no intro, no markdown."
+        meta   (:player/meta config)
         user-prompt (str "Player Name: " p-name "\n"
                          "Genre: " (if (keyword? genre) (name genre) (str genre)) "\n"
-                         "Traits: " (str/join ", " (map name traits)))
+                         "Traits: " (str/join ", " (map name traits))
+                         (when (seq meta)
+                           (str "\nCharacter Essence:\n"
+                                (str/join "\n" (map (fn [[k v]] (str (name k) ": " v)) meta)))))
         messages [{:role :system :content system-prompt}
                   {:role :user :content (str/trim user-prompt)}]
         res (complete-with-retry llm messages model {:max-tokens 1024} 0 3)]
@@ -947,8 +951,10 @@ Write ONLY the single-paragraph narrative. No explanation, no intro, no markdown
         player-id (ffirst (d/q '[:find ?e :where [?e :entity/type :player]] (d/db (:conn db))))
         config  (assoc config :player/id player-id :player/hook hook)
         prompt  {:type :start
-                 :player (assoc (select-keys config [:player/name :player/genre :player/traits])
-                                :db/id player-id)
+                 :player (-> (select-keys config [:player/name :player/genre :player/traits])
+                             (assoc :db/id player-id)
+                             (cond-> (seq (:player/meta config))
+                               (assoc :meta (:player/meta config))))
                  :hook hook
                  :raw "Game started"}
         env     (rlm-env prompt)]

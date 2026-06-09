@@ -306,6 +306,8 @@ For example, the structure looks like:
           :trait-info {:keen-eyed {:breadth :broad :domain :perception}
                        :shadow-walker {:breadth :broad :domain :stealth}
                        :silver-tongued {:breadth :broad :domain :social}}
+          :meta {:character/essence \"Unconscious mana channeling through swordplay — manifests as improbable outcomes in combat. Completely undetectable, even to the player.\"
+                 :character/flaw \"Believes he acts from honor but consistently chooses personal gain.\"}
           :reputation :notorious}
  :location {:name \"The Crooked Hearth\"
             :loc-type :tavern
@@ -334,6 +336,7 @@ Would produce output like:
 
 Rules:
 - CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Player and NPC traits are **invisible mechanical substrate** — they shape what the player notices and how the world reacts, but they must NEVER appear in the narrative as words, names, or concepts. Do NOT write 'keen-eyed', 'silver-tongued', 'shadow-walker', or any other trait keyword or paraphrase of it. Instead, render traits purely as sensory consequence: a :keen-eyed player notices the blade tucked under the innkeeper's apron; a :silver-tongued player finds the right words coming naturally. The reader must never know a trait system exists. Do NOT use the words 'trait', 'traits', 'die', 'dice', 'roll', 'rolls', 'fortune', 'folly', 'stat', 'attribute', or 'mechanic' in narrative output.
+- If :player :meta is present, use it as invisible authorial context. Let it subtly color the scene without ever surfacing as exposition — a character whose essence includes unconscious channeling might have the wind shift at the right moment, a flame lean toward them, a blade deflect without reason. Never explain it. Just let it happen.
 - Describe ONLY what the player perceives. Never invent events.
 - Player traits SHAPE perception. :keen-eyed notices details. :shadow-walker notices shadows/exits.
 - Note entities that are new or changed since last visit.
@@ -372,7 +375,8 @@ For example, the structure looks like:
  :actor {:name \"Aldric\"
          :traits #{:silver-tongued :shadow-walker}
          :trait-info {:silver-tongued {:breadth :broad :domain :social}
-                      :shadow-walker {:breadth :broad :domain :stealth}}}
+                      :shadow-walker {:breadth :broad :domain :stealth}}
+         :meta {:character/essence \"Unconscious mana channeling through swordplay — manifests as improbable outcomes. Undetectable.\"}}
  :target {:name \"Bjorn\"
           :traits #{:strong-armed :meticulous}
           :trait-info {:strong-armed {:breadth :narrow :domain :physical}
@@ -394,6 +398,7 @@ Would produce output like:
 
 Rules:
 - CRITICAL THIRD-WALL GUARD RAIL: The third wall must never be broken. Traits are **invisible mechanical substrate** — they weight the resolution but must NEVER appear in the narrative text as words, names, or concepts. Do NOT write ':silver-tongued', 'keen-eyed', or any trait name or paraphrase. Instead, show the consequence in the world: the crowd parts, the lock yields, the blade finds a gap. The dice outcome informs the degree of success or failure — never mention dice, fortune, folly, rolls, stats, attributes, or mechanics. The player must experience a living world, not a game system.
+- If :actor :meta is present, treat it as invisible authorial truth. Weave its essence into how the action resolves — as felt consequence, never as named fact. A character with unconscious channeling might find a sword blow land harder than physics explains, not because the narrative says so, but because the world simply bends slightly.
 - CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') addressing the player/actor at all times. Never use first-person ('I' / 'my') or third-person ('he' / 'she' / 'his' / 'Kyle'). Refer to the actor as 'you' or 'your' at all times.
 - Weigh BROAD player traits more heavily than NARROW NPC traits.
 - Relationship modifies outcome. Positive relationships soften negative actions.

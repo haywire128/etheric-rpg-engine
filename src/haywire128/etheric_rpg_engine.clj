@@ -44,9 +44,17 @@ The target configuration structure is a Clojure map:
 {:player/name \"string\"      ; The player character's name
  :player/genre :keyword       ; e.g. :medieval-fantasy, :cyberpunk, :space-opera, :gothic-horror, etc.
  :player/traits #{:keywords}   ; A set of player backgrounds/talents, e.g. #{:keen-eyed :silver-tongued :shadow-walker}
+ :player/meta {}              ; An open map for rich narrative essence — anything too nuanced for a keyword. Use this freely.
  :world/seed (or long nil)     ; A seed number, or nil for random
  :llm/default-model \"string\"  ; Typically \"inception/mercury-2\"
  :llm/max-tokens 16384}        ; Maximum tokens (default 16384)
+
+:player/meta is for prose-level character and world truth that keyword traits cannot express.
+Examples of what belongs in :player/meta:
+  {:character/essence \"Unconscious mana channeling through swordplay — manifests as improbable outcomes. Completely undetectable. Channeling does not exist in this world's common knowledge, not even to the player himself.\"
+   :world/secret \"The royal bloodline is not human. The king knows. No one else does.\"
+   :character/flaw \"Deep self-deception — believes he acts from honor but consistently chooses personal gain when it conflicts.\"}
+Use :player/meta whenever the player describes something too layered, contradictory, or narratively rich to collapse into a single keyword.
 
 Rules:
 1. Be helpful, clear, and neutral. Give them interesting ideas for genres or backgrounds/talents if they ask.
