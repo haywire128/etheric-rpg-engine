@@ -549,17 +549,20 @@
   "Store a forged entity into the database. Optionally link it to a location path."
   ([db ent] (store-entity! db ent nil))
   ([db ent loc-path]
-   (let [traits (or (:traits ent) #{})
+   (let [traits (or (:traits ent) (:trait/set ent) #{})
          traits-set (if (coll? traits) (set (map keyword traits)) #{})
-         entity {:db/id "temp-ent"
-                 :entity/type (or (:type ent) :npc)
-                 :entity/name (or (:name ent) "unknown")
-                 :entity/profession (or (:profession ent) :unknown)
-                 :entity/personality (pr-str (or (:personality ent) {}))
-                 :entity/appearance (pr-str (or (:appearance ent) {}))
-                 :entity/attributes (pr-str (or (:attributes ent) {}))
-                 :trait/set traits-set
-                 :trait/registry (pr-str (or (:trait-info ent) {}))}]
+         priorities-val (when-let [p (or (:priorities ent) (:npc/priorities ent))]
+                          (if (string? p) p (pr-str p)))
+         entity (cond-> {:db/id "temp-ent"
+                         :entity/type (or (:type ent) (:entity/type ent) :npc)
+                         :entity/name (or (:name ent) (:entity/name ent) "unknown")
+                         :entity/profession (or (:profession ent) (:entity/profession ent) :unknown)
+                         :entity/personality (pr-str (or (:personality ent) (:entity/personality ent) {}))
+                         :entity/appearance (pr-str (or (:appearance ent) (:entity/appearance ent) {}))
+                         :entity/attributes (pr-str (or (:attributes ent) (:entity/attributes ent) {}))
+                         :trait/set traits-set
+                         :trait/registry (pr-str (or (:trait-info ent) (:trait/registry ent) {}))}
+                  priorities-val (assoc :npc/priorities priorities-val))]
      (if loc-path
        (let [path-str (if (string? loc-path) loc-path (str/join "/" (map name loc-path)))
              ;; Find existing location entity-id
@@ -689,8 +692,8 @@ CRITICAL: GAME START UP PROCEDURES
 - For game START (when resolving Turn 0/initial startup):
   1. Call Cartographer to generate the world geography.
   2. Call Chronicler to generate the AOT Lore Web, and store all generated lore nodes using `store-lore!`.
-  3. Place the player in a contextually appropriate recovery location (a sub-location of the starter settlement). The location's name, type, and traits must emerge from the world genre, player class, and social context — do NOT use a fixed name like 'Caregiver's Cottage'. Store with `store-location!`.
-  4. JIT-populate this location using Harbinger, passing `{:recovering-player true}` in the context. Harbinger will generate one or more NPCs. At least one MUST have `:npc/priorities` containing a `:care-for-entity` entry targeting the player. The number, profession, name, appearance, and `:priority/reason` (e.g. `:professional`, `:familial`, `:altruistic`) are fully emergent from genre and world context. Store all entities with `store-entity!`.
+  3. Place the player in a contextually appropriate recovery location (a sub-location of the starter settlement). The location's name, type, and traits must emerge dynamically from the world genre, the player's class, and crucially, their background traits (e.g., :noble-blood vs. :street-urchin) and meta details. A player with noble heritage should wake in a private suite, manor bedchamber, or clean temple sanctuary; a street urchin should wake in a soot-streaked attic, a back-alley clinic, or a simple hay loft. Store with `store-location!`.
+  4. JIT-populate this location using Harbinger. You MUST pass the player's traits and metadata to Harbinger in the context (under `:player-traits` and `:player-meta`) along with `{:recovering-player true :player-name player-name}`. Harbinger will generate one or more NPCs whose status, profession, and quality of care align with the player's background. At least one MUST have `:npc/priorities` containing a `:care-for-entity` entry targeting the player. Store all entities with `store-entity!`.
   5. Call Scout to perceive the initial scene inside the recovery location (incorporating all generated entities and the lore web) and call `finalize!` to end the turn.
 
 CRITICAL: MOVEMENT & TRAVEL RESOLUTION
@@ -781,7 +784,8 @@ NOTE: The names, locations, and NPC details below are ILLUSTRATIVE ONLY. Do NOT 
                                 :npc-patterns []
                                 :recovering-player true
                                 :player-name player-name
-                                :player-class (get-in (env-get !env :prompt) [:player :player/meta])}
+                                :player-traits player-traits
+                                :player-meta (get-in (env-get !env :prompt) [:player :player/meta])}
                                :harbinger)
         stored-attendants (mapv #(store-entity! % recovery-path) (:entities harbinger-res))
         ;; Find sister regions (same depth/level) as surrounding areas

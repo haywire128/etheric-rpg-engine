@@ -236,7 +236,7 @@ Rules:
   "You are the Harbinger function.
 
 Signature:
-(fn harbinger [{:keys [genre location npc-patterns]}]
+(fn harbinger [{:keys [genre location npc-patterns recovering-player player-name player-traits player-meta]}]
   ;; Returns: {:entities [...]})
 
 Purpose:
@@ -286,7 +286,7 @@ Rules:
   - `:priority/target-name` — string, the name of the entity or faction this priority concerns (omit if no specific target)
   - `:priority/reason` — keyword, one of: `:professional`, `:familial`, `:altruistic`, `:obligatory`, `:fearful`, `:mercenary`
   - `:priority/urgency` — keyword, one of: `:critical`, `:high`, `:medium`, `:low`
-- RECOVERING PLAYER RULE: If the context includes `:recovering-player true`, at least one generated NPC MUST have a `:care-for-entity` priority targeting the player (`:priority/target-name` set to the player name). The `:priority/reason` and the NPC's profession, name, and appearance must emerge from the genre and world context — do NOT assume `:caregiver` profession or any specific identity. A guard, a parent, a priest, a droid, a fellow patient, or anyone else may be the one caring for the player.
+- RECOVERING PLAYER RULE: If the context includes `:recovering-player true`, at least one generated NPC MUST have a `:care-for-entity` priority targeting the player (`:priority/target-name` set to the player name). You will also receive `:player-traits` (e.g. `#{:noble-blood}`) and `:player-meta` (their essence/backgrounds). The number, names, professions, appearances, and priorities of the JIT-generated NPCs MUST dynamically align with the player's traits and background. For example, if the player has `:noble-blood`, they should be attended by a family physician, a loyal handmaid, or a high priest; if they have `:street-urchin`, they should be attended by a local herbalist, a poor parent, or a shady back-alley healer. Do NOT assume a generic caregiver profession or any specific identity.
 - Respond with EDN map containing :entities ONLY.")
 
 (def forger-prompt
@@ -340,7 +340,7 @@ Signature:
 Purpose:
 Construct the second-person sensory experience of a location from the player's eyes.
 CRITICAL: Write your narrative in the **second-person perspective** ('you' / 'your') at all times. Never use first-person perspective ('I' / 'my' / 'me').
-CRITICAL: On the first turn (Turn 1), frame the character's waking up as a transition from a surreal, abstract fever dream of \"The Ether\" (where their player name and traits like those in `:traits` were chosen) to waking in their current location as a child of the age specified in `:age` under `:player` burning with fever and suffering from amnesia. Derive the sleeping surface, room quality, and setting details entirely from the `:location` data and the `:entities` already present — do NOT assume a type. The scene must feature whoever is present in `:entities` with a caring or attending disposition toward the player character. Focus purely on the immediate environment, the child's feverish state, the attending presence(s), and the complete loss of memory — there must be no mention of external quests or global threats.
+CRITICAL: On the first turn (Turn 1), frame the character's waking up as a transition from a surreal, abstract fever dream of \"The Ether\" (where their player name and traits like those in `:traits` were chosen) to waking in their current location as a child of the age specified in `:age` under `:player` burning with fever and suffering from amnesia. Derive the sleeping surface, room quality, and setting details entirely from the `:location` data and the `:entities` already present — do NOT assume a type. Weave the sensory details of the room (e.g. the luxury of the bed and softness of the sheets for :noble-blood vs. the drafts, smell of dust, and coarseness of a straw mat for :street-urchin) to match the player's background and traits. The scene must feature whoever is present in `:entities` with a caring or attending disposition toward the player character. Focus purely on the immediate environment, the child's feverish state, the attending presence(s), and the complete loss of memory — there must be no mention of external quests or global threats.
 CRITICAL: You are passed the location's `:lineage` vector (e.g., `[:Eldoria :Whispering-Woods :Elderglen]`), JIT-populated `:entities` (characters/items present in the area), and `:surrounding` (surrounding sister macro-biomes/landmarks visible on the horizon). You MUST weave these specific geographic names, atmospheres, and neighboring lands into your description. Tell the player what region or kingdom they are in, and what distant landmarks or sister regions are visible on the horizon. However, because the player character has amnesia and has just woken up, they do NOT know the names of the characters standing nearby. You MUST NOT refer to these characters by their database names (e.g., do NOT write 'Brother Aldric' or 'Mira'). Instead, describe them purely by their appearance, dress, or role (e.g., 'a man in simple robes', 'a woman carrying herbs', 'a guard leaning by the door'). Their names must only be discovered organically through dialogue on subsequent turns.
 Player traits modulate what is noticed and how.
 Player behavioral patterns influence how NPCs perceive and react to the player.
