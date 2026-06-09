@@ -418,11 +418,11 @@
           text-with-traits (reduce (fn [t kw]
                                      (let [n (name kw)
                                            n-spaced (str/replace n #"[-_]" " ")
-                                           rep-n (get trait-replacements n "")
-                                           rep-spaced (get trait-replacements n-spaced "")]
-                                       (-> t
-                                           (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n) "\\b")) rep-n)
-                                           (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n-spaced) "\\b")) rep-spaced))))
+                                           rep-n (get trait-replacements n)
+                                           rep-spaced (get trait-replacements n-spaced)]
+                                       (cond-> t
+                                         rep-n (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n) "\\b")) rep-n)
+                                         rep-spaced (str/replace (re-pattern (str "(?i)\\b" (java.util.regex.Pattern/quote n-spaced) "\\b")) rep-spaced))))
                                    text
                                    traits)]
       (reduce (fn [t [pat rep]]

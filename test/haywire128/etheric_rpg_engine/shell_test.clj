@@ -309,7 +309,15 @@
           raw-text "You show off your sword-saint prowess."
           scrubbed (shell/scrub-third-wall raw-text ctx)]
       (is (not (clojure.string/includes? scrubbed "sword-saint")))
-      (is (clojure.string/includes? scrubbed "mastery of the blade")))))
+      (is (clojure.string/includes? scrubbed "mastery of the blade"))))
+  (testing "scrub-third-wall does not remove unregistered or natural trait words"
+    (let [ctx {:location {:traits #{:warm :quiet}}
+               :entities [{:name "Lady Alara" :trait/set #{:gentle}}]}
+          raw-text "The room is warm and quiet, and she has gentle hands."
+          scrubbed (shell/scrub-third-wall raw-text ctx)]
+      (is (clojure.string/includes? scrubbed "warm"))
+      (is (clojure.string/includes? scrubbed "quiet"))
+      (is (clojure.string/includes? scrubbed "gentle")))))
 
 (deftest travel-movement-updates-current-location
   (testing "Movement action updates the current location in env"
