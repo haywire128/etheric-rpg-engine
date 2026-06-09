@@ -76,10 +76,10 @@ Only output this block when the configuration conversation is fully complete and
             (do
               (cli/print-system "The Weaver bows and fades into the mists.")
               current-cfg)
-            
+
             (str/blank? trimmed)
             (recur)
-            
+
             :else
             (do
               (swap! hist conj {:role :user :content trimmed})
@@ -116,6 +116,102 @@ Only output this block when the configuration conversation is fully complete and
   (println (cli/style (str "  Genre: " (some-> (:player/genre config) name str/capitalize)) :bold :white))
   (println))
 
+(defn run-game-loop
+  "The in-game REPL. Runs until the player quits or stdin closes.
+   game: initial game state map. turn: starting turn number (usually 2).
+   Returns nil when the session ends."
+  [game turn]
+  (let [p-name (get-in game [:config :player/name] "Traveler")]
+    (cli/input-prompt p-name)
+    (when-let [action (read-line)]
+      (let [act-trimmed (str/trim action)
+            act-lower   (str/lower-case act-trimmed)]
+        (cond
+          (or (= "quit" act-lower) (= "/quit" act-lower))
+          (do
+            (println)
+            (cli/print-narrator "The mists envelope you once more as you return to the void.")
+            (println))
+
+          (= "/help" act-lower)
+          (do
+            (println)
+            (cli/print-narrator "✦ Available Commands ✦")
+            (println (cli/style "  /help"   :bold :thistle) (cli/style "   - Show this list of command options" :dim :lilac-ash))
+            (println (cli/style "  /status" :bold :thistle) (cli/style " - Display your character's current configuration" :dim :lilac-ash))
+            (println (cli/style "  /config" :bold :thistle) (cli/style " - Talk with the World Weaver to customize config map conversationally" :dim :lilac-ash))
+            (println (cli/style "  /quit"   :bold :thistle) (cli/style "   - Escape this world and return to reality" :dim :lilac-ash))
+            (println)
+            (recur game turn))
+
+          (= "/status" act-lower)
+          (do
+            (print-immersive-status (:config game))
+            (recur game turn))
+
+          (= "/config" act-lower)
+          (let [nested-cfg (conversational-config game p-name)
+                _ (cli/print-system (str "Initializing world for " (:player/name nested-cfg)
+                                         " (" (some-> (:player/genre nested-cfg) name) ")..."))
+                _ (cli/print-system (str "Turn " turn ": Invoking RLM Loop for game startup (Cartographer & Scout)..."))
+                nested-map (new-game nested-cfg)]
+            (if (:game-state nested-map)
+              (do
+                (cli/print-success "World initialized successfully!")
+                (println)
+                (cli/print-narrator (:initial-narrative nested-map))
+                (println)
+                (recur (:game-state nested-map) (inc turn)))
+              (do
+                (cli/print-error "Initialization failed.")
+                (recur game turn))))
+
+          (str/blank? act-trimmed)
+          (recur game turn)
+
+          :else
+          (do
+            (println (cli/style (str "Action [Turn " turn "] > " act-trimmed) :bold :frozen-water))
+            (cli/print-system "Fate shifts: Running RLM Loop (Oracle, Witness, Scribe)...")
+            (let [result (try
+                           (player-action game act-trimmed)
+                           (catch Exception e
+                             {:success false :error (.getMessage e)}))]
+              (if (:success result)
+                (do
+                  (cli/print-success (str "Turn " turn " Successful!"))
+                  (println)
+                  (cli/print-narrator (get-in result [:result :narrative] "The threads of fate settle."))
+                  (println)
+                  (recur game (inc turn)))
+                (do
+                  (if (:error result)
+                    (cli/print-error (str "The fabric of reality tears: " (:error result)))
+                    (cli/print-error "The world needs a moment to settle..."))
+                  (recur game turn))))))))))
+
+(defn start-session!
+  "Initialize a game from config and run the game loop.
+   Returns when the session ends (player quits or EOF)."
+  [config]
+  (cli/print-system (str "Initializing world for " (:player/name config)
+                          " (" (some-> (:player/genre config) name) ")..."))
+  (cli/print-system "Turn 1: Invoking RLM Loop for game startup (Cartographer & Scout)...")
+  (let [game-map (try
+                   (new-game config)
+                   (catch Exception e
+                     (cli/print-error (str "The fabric of reality tears during startup: " (.getMessage e)))
+                     (.printStackTrace e)
+                     nil))]
+    (if-let [game (:game-state game-map)]
+      (do
+        (cli/print-success "World initialized successfully!")
+        (println)
+        (cli/print-narrator (:initial-narrative game-map))
+        (println)
+        (run-game-loop game 2))
+      (cli/print-error "Initialization failed."))))
+
 (defn -main
   "Game REPL entry point."
   [& args]
@@ -125,220 +221,42 @@ Only output this block when the configuration conversation is fully complete and
   (println)
   (loop []
     (cli/input-prompt "Name (or '/config')")
-    (if-let [input (read-line)]
-      (let [trimmed (str/trim input)
+    (when-let [input (read-line)]
+      (let [trimmed     (str/trim input)
             lower-input (str/lower-case trimmed)]
         (cond
           (str/blank? trimmed)
           (recur)
-          
+
           (or (= "quit" lower-input) (= "/quit" lower-input))
           (do
             (println)
             (cli/print-narrator "The mists envelope you once more as you return to the void.")
             (println))
-          
+
           (= "/help" lower-input)
           (do
             (println)
             (cli/print-narrator "✦ Initial Options ✦")
-            (println (cli/style "  /help" :bold :thistle) (cli/style "   - Show this list of initial options" :dim :lilac-ash))
+            (println (cli/style "  /help"   :bold :thistle) (cli/style "   - Show this list of initial options" :dim :lilac-ash))
             (println (cli/style "  /config" :bold :thistle) (cli/style " - Converse with the World Weaver to design your character and world genre" :dim :lilac-ash))
-            (println (cli/style "  /quit" :bold :thistle) (cli/style "   - Escape this world and return to reality" :dim :lilac-ash))
+            (println (cli/style "  /quit"   :bold :thistle) (cli/style "   - Escape this world and return to reality" :dim :lilac-ash))
             (println)
             (recur))
-          
+
           (= "/config" lower-input)
-          (let [;; Load default client to converse
-                llm (shell/llm-client)
-                ;; Initialize a minimal game-state for Weaver
+          (let [llm        (shell/llm-client)
                 dummy-game {:llm llm :config (shell/load-config)}
-                new-cfg (conversational-config dummy-game "Traveler")
-                _ (cli/print-system (str "Initializing world for " (:player/name new-cfg) " (" (some-> (:player/genre new-cfg) name) ")..."))
-                _ (cli/print-system "Turn 1: Invoking RLM Loop for game startup (Cartographer & Scout)...")
-                ;; Start game runs Turn 1 JIT silently with new config!
-                game-map (try
-                           (new-game new-cfg)
-                           (catch Exception e
-                             (cli/print-error (str "The fabric of reality tears during startup: " (.getMessage e)))
-                             (.printStackTrace e)
-                             nil))
-                game (some-> game-map :game-state)
-                starting-narrative (some-> game-map :initial-narrative)]
-            (if game
-              (do
-                (cli/print-success "World initialized successfully!")
-                (println)
-                (cli/print-narrator starting-narrative)
-                (println)
-                (loop [g game
-                       turn 2]
-                  (let [p-name (get-in g [:config :player/name] (:player/name new-cfg))]
-                    (cli/input-prompt p-name)
-                    (when-let [action (read-line)]
-                      (let [act-trimmed (str/trim action)
-                            act-lower (str/lower-case act-trimmed)]
-                        (cond
-                          (or (= "quit" act-lower) (= "/quit" act-lower))
-                          (do
-                            (println)
-                            (cli/print-narrator "The mists envelope you once more as you return to the void.")
-                            (println))
-                          
-                          (= "/help" act-lower)
-                          (do
-                            (println)
-                            (cli/print-narrator "✦ Available Commands ✦")
-                            (println (cli/style "  /help" :bold :thistle) (cli/style "   - Show this list of command options" :dim :lilac-ash))
-                            (println (cli/style "  /status" :bold :thistle) (cli/style " - Display your character's current configuration" :dim :lilac-ash))
-                            (println (cli/style "  /config" :bold :thistle) (cli/style " - Talk with the World Weaver to customize config map conversationally" :dim :lilac-ash))
-                            (println (cli/style "  /quit" :bold :thistle) (cli/style "   - Escape this world and return to reality" :dim :lilac-ash))
-                            (println)
-                            (recur g turn))
-                          
-                          (= "/status" act-lower)
-                          (do
-                            (print-immersive-status (:config g))
-                            (recur g turn))
-                          
-                          (= "/config" act-lower)
-                          (let [nested-cfg (conversational-config g p-name)
-                                _ (cli/print-system (str "Initializing world for " (:player/name nested-cfg) " (" (some-> (:player/genre nested-cfg) name) ")..."))
-                                _ (cli/print-system (str "Turn " turn ": Invoking RLM Loop for game startup (Cartographer & Scout)..."))
-                                nested-game-map (new-game nested-cfg)
-                                nested-g (:game-state nested-game-map)
-                                nested-narrative (:initial-narrative nested-game-map)]
-                            (if (:game-state nested-game-map)
-                              (do
-                                (cli/print-success "World initialized successfully!")
-                                (println)
-                                (cli/print-narrator nested-narrative)
-                                (println)
-                                (recur nested-g (inc turn)))
-                              (do
-                                (cli/print-error "Initialization failed.")
-                                (recur g turn))))
-                          
-                          (str/blank? act-trimmed)
-                          (recur g turn)
-                          
-                          :else
-                          (do
-                            (println (cli/style (str "Action [Turn " turn "] > " act-trimmed) :bold :frozen-water))
-                            (cli/print-system "Fate shifts: Running RLM Loop (Oracle, Witness, Scribe)...")
-                            (let [result (try
-                                           (player-action g act-trimmed)
-                                           (catch Exception e
-                                             {:success false :error (.getMessage e)}))]
-                              (if (:success result)
-                                (do
-                                  (cli/print-success (str "Turn " turn " Successful!"))
-                                  (println)
-                                  (cli/print-narrator (get-in result [:result :narrative] "The threads of fate settle."))
-                                  (println)
-                                  (recur g (inc turn)))
-                                (do
-                                  (if (:error result)
-                                    (cli/print-error (str "The fabric of reality tears: " (:error result)))
-                                    (cli/print-error "The world needs a moment to settle..."))
-                                  (recur g turn))))))))))
-              (cli/print-error "Initialization failed.")))
-          
+                new-cfg    (conversational-config dummy-game "Traveler")]
+            (start-session! new-cfg)
+            (recur))
+
           :else
-          ;; They typed their name directly
-          (let [player-name trimmed
-                config (try
+          ;; Player typed their character name directly
+          (let [config (try
                          (shell/load-config)
                          (catch Exception _
-                           {:player/name player-name :player/genre :medieval-fantasy}))
-                ;; Override name from prompt
-                config (assoc config :player/name player-name)
-                _ (cli/print-system (str "Initializing world for " (:player/name config) " (" (some-> (:player/genre config) name) ")..."))
-                _ (cli/print-system "Turn 1: Invoking RLM Loop for game startup (Cartographer & Scout)...")
-                ;; Start game runs Turn 1 JIT silently!
-                game-map (try
-                           (new-game config)
-                           (catch Exception e
-                             (cli/print-error (str "The fabric of reality tears during startup: " (.getMessage e)))
-                             (.printStackTrace e)
-                             nil))
-                game (some-> game-map :game-state)
-                starting-narrative (some-> game-map :initial-narrative)]
-            (if game
-              (do
-                (cli/print-success "World initialized successfully!")
-                (println)
-                (cli/print-narrator starting-narrative)
-                (println)
-                (loop [g game
-                       turn 2]
-                  (let [p-name (get-in g [:config :player/name] player-name)]
-                    (cli/input-prompt p-name)
-                    (when-let [action (read-line)]
-                      (let [act-trimmed (str/trim action)
-                            act-lower (str/lower-case act-trimmed)]
-                        (cond
-                          (or (= "quit" act-lower) (= "/quit" act-lower))
-                          (do
-                            (println)
-                            (cli/print-narrator "The mists envelope you once more as you return to the void.")
-                            (println))
-                          
-                          (= "/help" act-lower)
-                          (do
-                            (println)
-                            (cli/print-narrator "✦ Available Commands ✦")
-                            (println (cli/style "  /help" :bold :thistle) (cli/style "   - Show this list of command options" :dim :lilac-ash))
-                            (println (cli/style "  /status" :bold :thistle) (cli/style " - Display your character's current configuration" :dim :lilac-ash))
-                            (println (cli/style "  /config" :bold :thistle) (cli/style " - Talk with the World Weaver to customize config map conversationally" :dim :lilac-ash))
-                            (println (cli/style "  /quit" :bold :thistle) (cli/style "   - Escape this world and return to reality" :dim :lilac-ash))
-                            (println)
-                            (recur g turn))
-                          
-                          (= "/status" act-lower)
-                          (do
-                            (print-immersive-status (:config g))
-                            (recur g turn))
-                          
-                          (= "/config" act-lower)
-                          (let [nested-cfg (conversational-config g p-name)
-                                _ (cli/print-system (str "Initializing world for " (:player/name nested-cfg) " (" (some-> (:player/genre nested-cfg) name) ")..."))
-                                _ (cli/print-system (str "Turn " turn ": Invoking RLM Loop for game startup (Cartographer & Scout)..."))
-                                nested-game-map (new-game nested-cfg)
-                                nested-g (:game-state nested-game-map)
-                                nested-narrative (:initial-narrative nested-game-map)]
-                            (if (:game-state nested-game-map)
-                              (do
-                                (cli/print-success "World initialized successfully!")
-                                (println)
-                                (cli/print-narrator nested-narrative)
-                                (println)
-                                (recur nested-g (inc turn)))
-                              (do
-                                (cli/print-error "Initialization failed.")
-                                (recur g turn))))
-                          
-                          (str/blank? act-trimmed)
-                          (recur g turn)
-                          
-                          :else
-                          (do
-                            (println (cli/style (str "Action [Turn " turn "] > " act-trimmed) :bold :frozen-water))
-                            (cli/print-system "Fate shifts: Running RLM Loop (Oracle, Witness, Scribe)...")
-                            (let [result (try
-                                           (player-action g act-trimmed)
-                                           (catch Exception e
-                                             {:success false :error (.getMessage e)}))]
-                              (if (:success result)
-                                (do
-                                  (cli/print-success (str "Turn " turn " Successful!"))
-                                  (println)
-                                  (cli/print-narrator (get-in result [:result :narrative] "The threads of fate settle."))
-                                  (println)
-                                  (recur g (inc turn)))
-                                (do
-                                  (if (:error result)
-                                    (cli/print-error (str "The fabric of reality tears: " (:error result)))
-                                    (cli/print-error "The world needs a moment to settle..."))
-                                  (recur g turn))))))))))
-              (cli/print-error "Initialization failed."))))))))))
+                           {:player/name trimmed :player/genre :medieval-fantasy}))
+                config (assoc config :player/name trimmed)]
+            (start-session! config)
+            (recur)))))))
