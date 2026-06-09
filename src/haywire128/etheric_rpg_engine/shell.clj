@@ -889,14 +889,19 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, inc
     ;; Extract relationship deltas from Oracle side-effects
     (let [rel-deltas (filter #(= (:type %) :relationship-delta) (:side-effects result))
           scribe-res (sub-rlm {:player {:name player-name :traits player-traits :age player-age :reputation :neutral}
-                                :turn-events [{:action :unknown :target target-name} :outcome result]
-                                :npc-actions (:npc-actions result)
-                                :behavioral-scan witness-res
-                                :relationship-deltas rel-deltas
-                                :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
-                                :last-turn last-turn
-                                :lore-web lore-web}
-                               :scribe)]
+                               :turn-events [{:action {:type (or (:type parsed-input) :unknown)
+                                                       :target target-name
+                                                       :intent raw-input}
+                                              :outcome (:outcome result)
+                                              :narrative (:narrative result)
+                                              :side-effects (:side-effects result)}]
+                               :npc-actions (:npc-actions result)
+                               :behavioral-scan witness-res
+                               :relationship-deltas rel-deltas
+                               :location {:name loc-name :traits loc-traits :atmosphere loc-atmosphere}
+                               :last-turn last-turn
+                               :lore-web lore-web}
+                              :scribe)]
       (finalize! !env {:narrative (:narrative scribe-res) :success true}))))
 
 For START: call Cartographer to create the world, then Scout to perceive.
