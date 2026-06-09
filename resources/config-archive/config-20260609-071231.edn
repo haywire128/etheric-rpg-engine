@@ -1,5 +1,5 @@
-{:player/name "Sage",
- :player/genre :medieval-fantasy,
+{:player/name "AeroTestPlayer",
+ :player/genre :sci-fi,
  :player/traits
  #{:unbreakable
    :innate-weaving

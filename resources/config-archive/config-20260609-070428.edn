@@ -1,0 +1,13 @@
+{:player/name "Sage",
+ :player/genre :medieval-fantasy,
+ :player/traits
+ #{:innate-weaving
+   :imperceptible-edge
+   :noble-blood
+   :arcane-resonance
+   :unyielding-adaptation
+   :sword-saint
+   :proleptic-blur},
+ :world/seed nil,
+  :llm/default-model "inception/mercury-2",
+  :llm/max-tokens 16384}
