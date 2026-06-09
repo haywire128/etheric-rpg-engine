@@ -413,6 +413,7 @@ Rules:
 - :magnitude-applied reflects how much of the dice magnitude actually manifested.
 - Side effects describe what CHANGED in the world. The caller applies them.
 - Never resolve actions beyond the immediate physical/social scope.
+- CRITICAL EDN VALUE CONSTRAINTS: All descriptive text/phrase values (e.g. reasons, names, actions, change descriptions, etc.) MUST be strings (wrapped in double quotes \"\"), not keywords (which begin with a colon :). Keywords must ONLY be used for strict system keys (like :type, :narrative, :from, :to, :delta, :action, etc.). Keywords must NEVER contain spaces (e.g., never generate :more aggressive or :relationship-reputation-shift).
 - Respond with EDN map ONLY.")
 
 (def witness-prompt
@@ -490,6 +491,7 @@ Rules:
 - :novel? true means this pattern is NOT in known-patterns.
 - emergent-effects must have groundedness > 0.6.
 - raw-observations are interesting facts not yet rising to pattern level.
+- CRITICAL EDN VALUE CONSTRAINTS: All descriptive text/phrase values (e.g. descriptions, reasons, names, actions, change descriptions, etc.) MUST be strings (wrapped in double quotes \"\"), not keywords (which begin with a colon :). Keywords must ONLY be used for strict system keys (like :type, :narrative, :from, :to, :delta, :action, etc.). Keywords must NEVER contain spaces (e.g., never generate :more aggressive or :relationship-reputation-shift).
 - Respond with EDN map ONLY.")
 
 (def scribe-prompt
@@ -542,6 +544,7 @@ Rules:
 - Describe emergent changes (reputation, relationships) naturally.
 - Suggest 2-3 natural next actions. Don't force the player's hand.
 - Never resolve future events. Only describe consequences of what ALREADY happened.
+- CRITICAL EDN VALUE CONSTRAINTS: All descriptive text/phrase values (e.g. suggestions, prompts, reasons, names, actions, change descriptions, etc.) MUST be strings (wrapped in double quotes \"\"), not keywords (which begin with a colon :). Keywords must ONLY be used for strict system keys (like :type, :narrative, :from, :to, :delta, :action, etc.). Keywords must NEVER contain spaces (e.g., never generate :more aggressive or :relationship-reputation-shift).
 - CRITICAL: EDN FORMATTING AND SYNTAX VALIDITY. You MUST produce a valid Clojure EDN map. Ensure all maps {} and vectors [] are properly balanced and closed. Do not leave any map key or value unclosed. Double-check your syntax before responding.
 - Respond with EDN map ONLY. No explanation. No markdown fences.")
 

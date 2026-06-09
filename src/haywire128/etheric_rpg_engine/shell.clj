@@ -423,27 +423,42 @@
                             {:role role-kw :available (keys c/role-registry)})))
         model (or model c/default-model)
         max-tokens (min (or max-tokens c/default-max-tokens) c/default-max-tokens)
-        messages [{:role :system :content prompt}
-                  {:role :user :content (pr-str context)}]
-        opts {:max-tokens max-tokens}
-        api-res (complete-with-retry llm messages model opts 0 3)
-        {:keys [content cost error]} api-res]
-    (log-debug (str "  [Sub-RLM " role-kw "] Input: " (pr-str context)))
-    (log-debug (str "  [Sub-RLM " role-kw "] Output Raw: " content))
-    (if content
-      (try
-        (let [parsed (extract-edn content)
-              res (if (map? parsed)
-                    (scrub-all-strings parsed context)
-                    parsed)]
-          (log-debug (str "  [Sub-RLM " role-kw "] Output Parsed: " (pr-str res)))
-          res)
-        (catch Exception e
-          (log-debug (str "  [Sub-RLM " role-kw "] Output Parse Error: " (.getMessage e)))
-          {:parse-error (.getMessage e) :raw content :cost cost}))
-      (do
-        (log-debug (str "  [Sub-RLM " role-kw "] Output Error: " (or error :empty-content)))
-        {:error (or error :empty-content) :cost cost}))))
+        base-messages [{:role :system :content prompt}
+                       {:role :user :content (pr-str context)}]]
+    (loop [retries 0
+           messages base-messages]
+      (let [opts {:max-tokens max-tokens}
+            api-res (complete-with-retry llm messages model opts 0 3)
+            {:keys [content cost error]} api-res]
+        (log-debug (str "  [Sub-RLM " role-kw " (attempt " (inc retries) ")] Input: " (pr-str context)))
+        (log-debug (str "  [Sub-RLM " role-kw "] Output Raw: " content))
+        (if content
+          (let [parsed-res (try
+                             (let [parsed (extract-edn content)]
+                               (if (map? parsed)
+                                 {:success true :parsed parsed}
+                                 {:success false :error (str "Expected EDN map, got " (type parsed))}))
+                             (catch Exception e
+                               {:success false :error (.getMessage e)}))]
+            (if (:success parsed-res)
+              (let [res (scrub-all-strings (:parsed parsed-res) context)]
+                (log-debug (str "  [Sub-RLM " role-kw "] Output Parsed: " (pr-str res)))
+                res)
+              (if (< retries 2)
+                (do
+                  (log-debug (str "  [Sub-RLM " role-kw "] Parse Error on attempt " (inc retries) ": " (:error parsed-res) ". Retrying with correction prompt..."))
+                  (recur (inc retries)
+                         (conj messages
+                               {:role :assistant :content content}
+                               {:role :user :content (str "ERROR: Your response could not be parsed as a Clojure EDN map: "
+                                                          (:error parsed-res)
+                                                          "\n\nPlease correct the Clojure syntax (ensure all maps/vectors/braces are closed, string values are double-quoted, keywords do not contain spaces or illegal characters) and output the full, corrected EDN map ONLY. No explanation, no markdown fences.")})))
+                (do
+                  (log-debug (str "  [Sub-RLM " role-kw "] Parse Error: " (:error parsed-res) " after max retries."))
+                  {:parse-error (:error parsed-res) :raw content :cost cost}))))
+          (do
+            (log-debug (str "  [Sub-RLM " role-kw "] Output Error: " (or error :empty-content)))
+            {:error (or error :empty-content) :cost cost}))))))
 
 (defn flatten-taxonomy
   "Flatten nested Cartographer nodes into schema-compliant flat entities.
@@ -670,15 +685,15 @@ EXAMPLE for player ACTION — resolve an action dynamically querying the DB, run
       loc-atmosphere (:location/atmosphere location)
       patterns (q-player-patterns !db player-id)
       dice (cast-dice)
-      ;; 1. Retrieve all entities in current location
-      all-ents (q-range !db loc-path 100)
+      ;; 1. Retrieve and resolve all entities in current location
+      ents (keep #(q-entity !db (:db/id %)) (:location/entities location))
       ;; 2. Dynamically identify target NPC/object from raw player input
       target-candidate (some (fn [e]
                                (when (and (#{:npc :object} (:entity/type e))
                                           (or (clojure.string/includes? (clojure.string/lower-case raw-input) (clojure.string/lower-case (:entity/name e)))
                                               (clojure.string/includes? (clojure.string/lower-case raw-input) (name (:entity/type e)))))
                                  e))
-                             all-ents)
+                             ents)
       ;; 3. Retrieve relationships with the target
       relationship (when target-candidate
                      (some (fn [r]
@@ -1045,8 +1060,8 @@ Write ONLY the single-paragraph narrative. No explanation, no intro, no markdown
   [game-state input-raw]
   (let [{:keys [llm db env config]} game-state
         last-narrative (or (c/env-get env :last-narrative)
-                           (:player/hook config)
-                           (get-in (c/env-get env :final) [:result :narrative]))
+                           (:narrative (c/env-get env :final))
+                           (:player/hook config))
         last-action    (c/env-get env :last-action)
         prompt {:type :action
                 :player-input (c/parse-player-input input-raw)

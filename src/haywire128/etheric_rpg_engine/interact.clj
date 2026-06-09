@@ -73,8 +73,8 @@
         {:success false :error "No active game session. Run /start first."})
       (let [config (get @(:atom env) :config)
             last-narrative (or (c/env-get env :last-narrative)
-                               (:player/hook config)
-                               (get-in (c/env-get env :final) [:result :narrative]))
+                               (:narrative (c/env-get env :final))
+                               (:player/hook config))
             last-action    (c/env-get env :last-action)
             prompt {:type :action
                     :player-input (c/parse-player-input input-str)
